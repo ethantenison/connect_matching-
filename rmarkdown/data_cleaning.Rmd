@@ -1,0 +1,64 @@
+---
+title: "Data Cleaning"
+author: "Ethan Tenison"
+date: "`r format(Sys.Date(), '%B %d, %Y') `"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(readr)
+library(janitor)
+
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+Data Pull
+
+```{r message=FALSE, warning=FALSE}
+orgs_raw <- read_csv("data/raw/07.Community Organization (Summer 2021)_August 5, 2021_11.19.csv") |>
+  row_to_names(row_number = 1) |> 
+  clean_names() |> 
+  slice(-1)
+
+
+stu_raw <- read_csv("data/raw/07.CONNECT- Summer 2021_August 5, 2021_11.17.csv") |> 
+  row_to_names(row_number = 1) |> 
+  clean_names() |> 
+  slice(-1)
+
+```
+
+
+Org Data Cleaning for Matching 
+
+```{r org_clean, message=FALSE, warning=FALSE}
+orgs <- orgs_raw |>
+  filter(progress == 100) 
+
+
+```
+
+
+Student Data Cleaning for Matching
+
+```{r org_clean, message=FALSE, warning=FALSE}
+stu <- stu_raw |>
+  filter(progress == 100) |> 
+  select(
+    first_name,
+    last_name,
+    identify_each_of_the_project_categories_you_are_interested_in_check_all_that_apply,                                       when_are_you_available_to_work_on_a_project_check_all_that_apply,                                                         realistically_how_much_time_can_you_commit_per_week_to_working_on_a_project,
+    is_there_any_additional_information_regarding_your_availability_that_we_should_know_about,
+    do_you_have_access_to_transportation,                                                                                     do_you_need_flexible_work_hours,
+    do_you_need_the_ability_to_work_remotely,
+    over_the_past_5_years_approximately_how_much_experience_have_you_had_working_or_directly_volunteering_with_nonprofit_organizations,
+    44:68
+  )
+
+names(stu) = gsub(pattern = "please_rate_your_experience_in_the_following_technical_skills_note_1_not_experienced_and_5_extremely_experienced_", replacement = "", x = names(stu))
+
+
+```
