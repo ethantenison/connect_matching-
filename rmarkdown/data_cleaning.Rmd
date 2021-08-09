@@ -9,25 +9,80 @@ output: html_document
 library(tidyverse)
 library(readr)
 library(janitor)
+library(qualtRics)
+library(Hmisc)
 
 
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+
+
 ```
 
-Data Pull
+## Using Qualtrics to pull survey data
+```{r qualtrics, message=FALSE, warning=FALSE}
+qualtrics_api_credentials(
+api_key = "0niuOUgg0bM7FJWr8f0eJzj1WbwcjCJfRFIW67x8", #you can find the api key on qualtrics
+base_url = "ca1.qualtrics.com", 
+install = FALSE
+)
 
-```{r message=FALSE, warning=FALSE}
-orgs_raw <- read_csv("data/raw/07.Community Organization (Summer 2021)_August 5, 2021_11.19.csv") |>
-  row_to_names(row_number = 1) |> 
+surveys <- all_surveys() 
+org_raw <- fetch_survey(surveyID = surveys$id[8])
+
+stu_raw <- fetch_survey(surveyID = surveys$id[4])
+
+```
+## Org data cleaning 
+
+```{r data_pull_old, message=FALSE, warning=FALSE}
+org <- org_raw |>
   clean_names() |> 
-  slice(-1)
+  select(q1,q11,q13,q14,q15,q16_1,q17_1:q17_25)
+  
 
+colnames(org) <- label(org)
 
-stu_raw <- read_csv("data/raw/07.CONNECT- Summer 2021_August 5, 2021_11.17.csv") |> 
-  row_to_names(row_number = 1) |> 
+org <- org |>
   clean_names() |> 
-  slice(-1)
+  rename(time_commitment = realistically_how_much_time_do_you_expect_your_student_to_commit_per_week_working_on_your_assigned_project,
+         transportation = does_your_candidate_need_to_have_access_to_transportation,
+         flexible_hours = will_your_project_permit_flexible_work_hours,
+         remote = will_your_candidate_be_able_to_work_remotely,
+         nonprofit_experience = how_much_experience_working_or_volunteering_with_nonprofits_should_your_candidate_have_working_or_volunteering_for_nonprofits
+         )
+
+names(org) <- gsub(
+  pattern = "please_rate_how_relevant_the_following_technical_skills_are_to_your_project_",
+  replacement = "",
+  x = names(org))
+
+
+org <- data.frame(lapply(org, function(x) {
+                  gsub("1 - Not relevant", "1", x)
+              }))
+
+org <- data.frame(lapply(org, function(x) {
+                  gsub("5 - Extremely relevant", "5", x)
+              }))
+
+
+org$time_commitment[org$time_commitment == "Less than 5 hours per week"] <- "1"
+org$time_commitment[org$time_commitment == "5 - 10 hours per week"] <- "2"
+org$time_commitment[org$time_commitment == "8 - 12 hours per week"] <- "3"
+org$time_commitment[org$time_commitment == "10 - 15 hours per week"] <- "4"
+org$time_commitment[org$time_commitment == "15 - 20 hours per week"] <- "5"
+
+org$nonprofit_experience[org$nonprofit_experience == "No experience required"] <- "1"
+org$nonprofit_experience[org$nonprofit_experience == "A little"] <- "2"
+org$nonprofit_experience[org$nonprofit_experience == "A moderate amount"] <- "3"
+org$nonprofit_experience[org$nonprofit_experience == "A lot"] <- "4"
+org$nonprofit_experience[org$nonprofit_experience == "A great deal of experience"] <- "5"
+
+
+org <- org |> 
+  mutate(across(6:31, as.numeric),
+         time_commitment = as.numeric(time_commitment))
 
 ```
 
@@ -38,7 +93,7 @@ Org Data Cleaning for Matching
 orgs <- orgs_raw |>
   filter(progress == 100) 
 
-
+c
 ```
 
 
@@ -58,7 +113,9 @@ stu <- stu_raw |>
     44:68
   )
 
-names(stu) = gsub(pattern = "please_rate_your_experience_in_the_following_technical_skills_note_1_not_experienced_and_5_extremely_experienced_", replacement = "", x = names(stu))
+names(stu) <- gsub(pattern = "please_rate_your_experience_in_the_following_technical_skills_note_1_not_experienced_and_5_extremely_experienced_",
+                  replacement = "",
+                  x = names(stu))
 
 
 ```
