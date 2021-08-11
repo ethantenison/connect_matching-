@@ -56,7 +56,14 @@ org <- org |>
          flexible_hours,
          remote,
          nonprofit_experience,
-         47:71)
+         39:67) |> 
+  mutate(nonprofit_experience = case_when(
+    nonprofit_experience == "No experience required" ~ "1",
+    nonprofit_experience == "Less than 6 months" ~ "2",
+    nonprofit_experience == "6 - 12 months" ~ "3",
+    nonprofit_experience == "1 - 2 years" ~ "4",
+    nonprofit_experience == "2 or more years" ~ "5",
+  ))
 
 names(org) <- gsub(
   pattern = "please_rate_how_relevant_the_following_technical_skills_are_to_your_project_",
@@ -78,12 +85,6 @@ org$time_commitment[org$time_commitment == "5 - 10 hours per week"] <- "2"
 org$time_commitment[org$time_commitment == "8 - 12 hours per week"] <- "3"
 org$time_commitment[org$time_commitment == "10 - 15 hours per week"] <- "4"
 org$time_commitment[org$time_commitment == "15 - 20 hours per week"] <- "5"
-
-org$nonprofit_experience[org$nonprofit_experience == "No experience required"] <- "1"
-org$nonprofit_experience[org$nonprofit_experience == "A little"] <- "2"
-org$nonprofit_experience[org$nonprofit_experience == "A moderate amount"] <- "3"
-org$nonprofit_experience[org$nonprofit_experience == "A lot"] <- "4"
-org$nonprofit_experience[org$nonprofit_experience == "A great deal of experience"] <- "5"
 
 
 org <- org |> 
@@ -155,47 +156,21 @@ stu <- stu |>
 ```{r utility}
 
 #utility organizations                                    
+column_names <- stu$name
+row_names <- org$organization
 
-org1 <- org[1,] |> 
-  pivot_longer(2:27, names_to = "variable", values_to = "org_value")
-
-stu1 <- stu[1,] |> 
-  pivot_longer(2:27, names_to = "variable", values_to = "student_value") |> 
-  select(name, student_value)
-
-
-match1 <- bind_cols(org1,stu1) |> 
-  mutate(subtracted_preference = org_value - student_value,
-         utility = case_when(
-           subtracted_preference <= 0 ~ 1,
-           subtracted_preference == 1 ~ .75,
-           subtracted_preference == 2 ~ .5,
-           subtracted_preference == 3 ~ .25,
-           subtracted_preference == 4 ~ 0
-         ),
-         utility = case_when( #if the org put 1 that means they get zero utility
-           org_value == 1 ~ 0, 
-           TRUE ~ utility
-         ))
-
-utility_score <- sum(match1$utility)
-
-output <- matrix(ncol=length(org$organization), nrow=length(org$organization))
-
-#nested for loop to get utility scores 
-
-u <- matrix(nrow = 3, ncol = 24)
+uO <- matrix(nrow = length(org$organization),
+             ncol = length(stu$name),
+             dimnames = list(row_names, column_names))
 
 for (i in 1:length(org$organization)) {
-  
-  
   for (j in 1:length(stu$name)) {
     org1 <- org[i,] |>
       pivot_longer(2:27, names_to = "variable", values_to = "org_value")
     
     stu1 <- stu[j,] |>
       pivot_longer(2:27, names_to = "variable", values_to = "student_value") |>
-      select(name, student_value)
+      dplyr::select(name, student_value)
     
     match1 <- bind_cols(org1, stu1) |>
       mutate(
@@ -213,11 +188,54 @@ for (i in 1:length(org$organization)) {
       )
     
     utility_score <- sum(match1$utility)
+    uO[i,j] <- utility_score
+  }
+}
+
+#utility students 
+row_names <- stu$name
+column_names <- org$organization
+
+uS <- matrix(nrow = length(stu$name),
+             ncol = length(org$organization),
+             dimnames = list(row_names, column_names))
+
+
+for (j in 1:length(stu$name)) {
+  for (i in 1:length(org$organization)) {
+    org1 <- org[i, ] |>
+      pivot_longer(2:27, names_to = "variable", values_to = "org_value")
     
-    u[i,j] <- utility_score
+    stu1 <- stu[j, ] |>
+      pivot_longer(2:27, names_to = "variable", values_to = "student_value") |>
+      select(name, student_value)
     
+    match1 <- bind_cols(stu1, org1) |>
+      mutate(
+        subtracted = student_value - org_value,
+        utility = case_when(
+          subtracted <= 0 ~ 1,
+          subtracted == 1 ~ .75,
+          subtracted == 2 ~ .5,
+          subtracted == 3 ~ .25,
+          subtracted == 4 ~ 0
+        ),
+        utility = case_when(#if the org put 1 that means they get zero utility
+          org_value == 1 ~ 0,
+          TRUE ~ utility)
+      )
+    
+    utility_score <- sum(match1$utility)
+    uS[j, i] <- utility_score
   }
 }
 
 
+```
+
+## Using the Gale Shapley Algorithm
+
+```{r gale_shapley, message=FALSE, warning=FALSE}
+
+matching = galeShapley.marriageMarket(uO, uS)
 ```
