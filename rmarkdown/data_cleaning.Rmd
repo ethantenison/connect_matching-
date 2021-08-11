@@ -11,6 +11,7 @@ library(readr)
 library(janitor)
 library(qualtRics)
 library(Hmisc)
+library(matchingR)
 
 
 knitr::opts_chunk$set(echo = TRUE)
@@ -27,18 +28,16 @@ base_url = "ca1.qualtrics.com",
 install = FALSE
 )
 
-surveys <- all_surveys() 
-org_raw <- fetch_survey(surveyID = surveys$id[8])
+surveys <- all_surveys() #You've got check this first 
+org_raw <- fetch_survey(surveyID = surveys$id[10])
 
-stu_raw <- fetch_survey(surveyID = surveys$id[4])
+stu_raw <- fetch_survey(surveyID = surveys$id[13])
 
 ```
 ## Org data cleaning 
 
 ```{r data_pull_old, message=FALSE, warning=FALSE}
-org <- org_raw |>
-  clean_names() |> 
-  select(q1,q11,q13,q14,q15,q16_1,q17_1:q17_25)
+org <- org_raw
   
 
 colnames(org) <- label(org)
@@ -50,7 +49,14 @@ org <- org |>
          flexible_hours = will_your_project_permit_flexible_work_hours,
          remote = will_your_candidate_be_able_to_work_remotely,
          nonprofit_experience = how_much_experience_working_or_volunteering_with_nonprofits_should_your_candidate_have_working_or_volunteering_for_nonprofits
-         )
+         ) |> 
+  select(organization,
+         time_commitment,
+         transportation,
+         flexible_hours,
+         remote,
+         nonprofit_experience,
+         47:71)
 
 names(org) <- gsub(
   pattern = "please_rate_how_relevant_the_following_technical_skills_are_to_your_project_",
@@ -82,40 +88,136 @@ org$nonprofit_experience[org$nonprofit_experience == "A great deal of experience
 
 org <- org |> 
   mutate(across(6:31, as.numeric),
-         time_commitment = as.numeric(time_commitment))
+         time_commitment = as.numeric(time_commitment)) |> 
+  select(organization, 6:31) #this part is only for the testing, i'll remove when I'm adding in disqualifiers
 
 ```
 
-
-Org Data Cleaning for Matching 
-
-```{r org_clean, message=FALSE, warning=FALSE}
-orgs <- orgs_raw |>
-  filter(progress == 100) 
-
-c
-```
-
-
-Student Data Cleaning for Matching
+## Student Data Cleaning for Matching
 
 ```{r org_clean, message=FALSE, warning=FALSE}
-stu <- stu_raw |>
+
+stu <- stu_raw
+
+colnames(stu) <- label(stu)
+
+stu <- stu |> 
+  clean_names() |> 
   filter(progress == 100) |> 
   select(
     first_name,
     last_name,
-    identify_each_of_the_project_categories_you_are_interested_in_check_all_that_apply,                                       when_are_you_available_to_work_on_a_project_check_all_that_apply,                                                         realistically_how_much_time_can_you_commit_per_week_to_working_on_a_project,
+    realistically_how_much_time_can_you_commit_per_week_to_working_on_a_project,
     is_there_any_additional_information_regarding_your_availability_that_we_should_know_about,
-    do_you_have_access_to_transportation,                                                                                     do_you_need_flexible_work_hours,
+    do_you_have_access_to_transportation,
+    do_you_need_flexible_work_hours,
     do_you_need_the_ability_to_work_remotely,
     over_the_past_5_years_approximately_how_much_experience_have_you_had_working_or_directly_volunteering_with_nonprofit_organizations,
-    44:68
-  )
+    64:88
+  ) |>
+    rename(
+      time_commitment = realistically_how_much_time_can_you_commit_per_week_to_working_on_a_project,
+      transportation = do_you_have_access_to_transportation,
+      flexible_hours = do_you_need_flexible_work_hours, 
+      remote = do_you_need_the_ability_to_work_remotely,
+      nonprofit_experience = over_the_past_5_years_approximately_how_much_experience_have_you_had_working_or_directly_volunteering_with_nonprofit_organizations
+    ) |> 
+  mutate(nonprofit_experience = case_when(
+    nonprofit_experience == "No experience (yet!)" ~ "1",
+    nonprofit_experience == "Less than 6 months" ~ "2",
+    nonprofit_experience == "6 - 12 months" ~ "3",
+    nonprofit_experience == "1 - 2 years" ~ "4",
+    nonprofit_experience == "2 or more years" ~ "5",
+  ))
 
 names(stu) <- gsub(pattern = "please_rate_your_experience_in_the_following_technical_skills_note_1_not_experienced_and_5_extremely_experienced_",
                   replacement = "",
                   x = names(stu))
+
+stu$time_commitment[stu$time_commitment == "Less than 5 hours per week"] <- "1"
+stu$time_commitment[stu$time_commitment == "5 - 10 hours per week"] <- "2"
+stu$time_commitment[stu$time_commitment == "8 - 12 hours per week"] <- "3"
+stu$time_commitment[stu$time_commitment == "10 - 15 hours per week"] <- "4"
+stu$time_commitment[stu$time_commitment == "15 - 20 hours per week"] <- "5"
+
+stu <- stu |> 
+  mutate(across(8:33, as.numeric),
+         time_commitment = as.numeric(time_commitment)) |> 
+  mutate(name = paste0(first_name," ", last_name)) |> 
+  select(name, 8:33) #just the test phase 
+
+```
+
+
+## Creating rating utility
+
+
+```{r utility}
+
+#utility organizations                                    
+
+org1 <- org[1,] |> 
+  pivot_longer(2:27, names_to = "variable", values_to = "org_value")
+
+stu1 <- stu[1,] |> 
+  pivot_longer(2:27, names_to = "variable", values_to = "student_value") |> 
+  select(name, student_value)
+
+
+match1 <- bind_cols(org1,stu1) |> 
+  mutate(subtracted_preference = org_value - student_value,
+         utility = case_when(
+           subtracted_preference <= 0 ~ 1,
+           subtracted_preference == 1 ~ .75,
+           subtracted_preference == 2 ~ .5,
+           subtracted_preference == 3 ~ .25,
+           subtracted_preference == 4 ~ 0
+         ),
+         utility = case_when( #if the org put 1 that means they get zero utility
+           org_value == 1 ~ 0, 
+           TRUE ~ utility
+         ))
+
+utility_score <- sum(match1$utility)
+
+output <- matrix(ncol=length(org$organization), nrow=length(org$organization))
+
+#nested for loop to get utility scores 
+
+u <- matrix(nrow = 3, ncol = 24)
+
+for (i in 1:length(org$organization)) {
+  
+  
+  for (j in 1:length(stu$name)) {
+    org1 <- org[i,] |>
+      pivot_longer(2:27, names_to = "variable", values_to = "org_value")
+    
+    stu1 <- stu[j,] |>
+      pivot_longer(2:27, names_to = "variable", values_to = "student_value") |>
+      select(name, student_value)
+    
+    match1 <- bind_cols(org1, stu1) |>
+      mutate(
+        subtracted = org_value - student_value,
+        utility = case_when(
+          subtracted <= 0 ~ 1,
+          subtracted == 1 ~ .75,
+          subtracted == 2 ~ .5,
+          subtracted == 3 ~ .25,
+          subtracted == 4 ~ 0
+        ),
+        utility = case_when(#if the org put 1 that means they get zero utility
+          org_value == 1 ~ 0,
+          TRUE ~ utility)
+      )
+    
+    utility_score <- sum(match1$utility)
+    
+    u[i,j] <- utility_score
+    
+  }
+}
 
 
 ```
