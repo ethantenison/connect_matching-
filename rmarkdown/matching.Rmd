@@ -1,0 +1,410 @@
+---
+title: "CONNECT Matching"
+description: |
+  University of Texas at Austin: Fall 2021 Cohort
+author:
+  - name: Ethan Tenison 
+    affiliation: RGK Center for Philanthropy and Community Service 
+    affiliation_url: https://rgkcenter.org/
+date: "`r format(Sys.Date(), '%B %d, %Y') `"
+output:
+  distill::distill_article:
+    code_folding: yes
+    toc: yes
+    toc_float: yes
+  html_document: 
+    theme: paper
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+  pdf_document: default
+  word_document:
+    toc: yes
+---
+<style type="text/css">
+.main-container {
+  max-width: 1800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+```{r setup, include=FALSE}
+library(tidyverse) #A collection of packages that use the same grammar and structure
+library(qualtRics) #For connecting to Qualtrics API
+library(Hmisc) #Helpful for annotations and labels
+library(matchingR) #Contains Gale-Shapley Algorithm
+library(kableExtra) #Package for creating customizable tables 
+library(janitor)#data cleaning package
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+
+```
+
+## Qualtrics
+
+Using the `qualtRics` package I can pull the organization and student surveys directly from Qualtrics. In order to connect to the Qualtrics API, you must have UT staff privledges. Any UT student must have their privledges updated by contacting UT IT Services. Your Qualtrics API can be accessed through account settings in the "Qualtrics IDs" section. 
+
+```{r qualtrics, message=FALSE, warning=FALSE, include=FALSE}
+
+# Connecting to the Qualtrics API
+qualtrics_api_credentials(
+api_key = Sys.getenv("qualtrics_key"), 
+base_url = "ca1.qualtrics.com", 
+install = FALSE
+)
+
+#Pulling the organization and students surveys 
+surveys <- all_surveys() 
+
+#Finding the row index for organization and student surveys
+stu_number <- which(surveys$name=="08.CONNECT- Fall 2021", arr.ind=TRUE)
+org_number <- which(surveys$name=="Matching Form_Fall 2021", arr.ind=TRUE)
+
+#Fetching the Survey Contents 
+org_raw <- fetch_survey(surveyID = surveys$id[org_number])
+stu_raw <- fetch_survey(surveyID = surveys$id[stu_number])
+
+```
+## Data Cleaning
+
+The data from Qualtrics can be messy. Many of the variables names default to the question number. In order to make the variable names more descriptive, the actual question description is substituted. This causes the variable names to be rather long. To reduce the length of variable names, many of them have been renamed, and the `stringr` package was used to remove repetitive words. In addition, all of the variables used by the algorithm were converted to numeric values to ensure everything uses the same 1 through 5 scale.  
+
+### Organizations 
+
+```{r data_pull_old, message=FALSE, warning=FALSE}
+org <- org_raw
+
+#Assigning variable names
+colnames(org) <- label(org)
+
+org <- org |>
+  clean_names() |>
+  #Specify here which school to filter by
+  filter(which_connect_program_is_this_project_affiliated_with == "RGK Center") |> 
+  rename(
+    time_commitment = realistically_how_much_time_do_you_expect_your_student_to_commit_per_week_working_on_your_assigned_project,
+    transportation = does_your_candidate_need_to_have_access_to_transportation,
+    flexible_hours = will_your_project_permit_flexible_work_hours,
+    remote = will_your_candidate_be_able_to_work_remotely,
+    nonprofit_experience = how_much_experience_working_or_volunteering_with_nonprofits_should_your_candidate_have_working_or_volunteering_for_nonprofits
+  ) |>
+  select(
+    organization,
+    project_name,
+    project_goal,
+    project_deliverables,
+    transportation,
+    flexible_hours,
+    remote,
+    time_commitment,
+    nonprofit_experience,
+    40:64
+  ) |>
+  mutate(
+    nonprofit_experience = case_when(
+      nonprofit_experience == "No experience required" ~ "1",
+      nonprofit_experience == "Less than 6 months" ~ "2",
+      nonprofit_experience == "6 - 12 months" ~ "3",
+      nonprofit_experience == "1 - 2 years" ~ "4",
+      nonprofit_experience == "2 or more years" ~ "5",
+    ),
+    time_commitment = case_when(
+      time_commitment == "Less than 5 hours per week" ~ "1",
+      time_commitment == "5 - 10 hours per week" ~ "2",
+      time_commitment == "8 - 12 hours per week" ~ "3",
+      time_commitment == "10 - 15 hours per week" ~ "4",
+      time_commitment == "15 - 20 hours per week" ~ "5"
+    )
+  ) |> 
+  arrange(project_name)
+
+
+names(org) <- gsub(pattern = "please_rate_how_relevant_the_following_technical_skills_are_to_your_project_",
+                   replacement = "",
+                   x = names(org))
+
+org <- data.frame(lapply(org, function(x) {
+  gsub("1 - Not relevant", "1", x)
+}))
+
+org <- data.frame(lapply(org, function(x) {
+  gsub("5 - Extremely relevant", "5", x)
+}))
+
+
+org <- org |>
+  mutate(across(8:34, as.numeric))
+
+#For Table 
+org_table <- org |> 
+  select(-c(organization,project_deliverables, project_goal))
+
+names(org_table) <- gsub(pattern = "_",
+                  replacement = " ",
+                  x = names(org_table))
+
+names(org_table) <- str_to_title(names(org_table))
+
+kbl(org_table) |>
+  kable_material(c("hover", "striped"), full_width = F) |>
+  scroll_box(width = "100%", height = "400px")
+```
+
+### Students
+
+```{r org_clean, message=FALSE, warning=FALSE}
+
+stu <- stu_raw
+
+colnames(stu) <- label(stu)
+
+stu <- stu |> 
+  clean_names() |> 
+  filter(progress == 100) |> 
+  select(
+    first_name,
+    last_name,
+    is_there_any_additional_information_regarding_your_availability_that_we_should_know_about,
+    do_you_have_access_to_transportation,
+    do_you_need_flexible_work_hours,
+    do_you_need_the_ability_to_work_remotely,
+    realistically_how_much_time_can_you_commit_per_week_to_working_on_a_project,
+    over_the_past_5_years_approximately_how_much_experience_have_you_had_working_or_directly_volunteering_with_nonprofit_organizations,
+    64:88
+  ) |>
+    rename(
+      time_commitment = realistically_how_much_time_can_you_commit_per_week_to_working_on_a_project,
+      transportation = do_you_have_access_to_transportation,
+      flexible_hours = do_you_need_flexible_work_hours, 
+      remote = do_you_need_the_ability_to_work_remotely,
+      nonprofit_experience = over_the_past_5_years_approximately_how_much_experience_have_you_had_working_or_directly_volunteering_with_nonprofit_organizations
+    ) |> 
+  mutate(nonprofit_experience = case_when(
+    nonprofit_experience == "No experience (yet!)" ~ "1",
+    nonprofit_experience == "Less than 6 months" ~ "2",
+    nonprofit_experience == "6 - 12 months" ~ "3",
+    nonprofit_experience == "1 - 2 years" ~ "4",
+    nonprofit_experience == "2 or more years" ~ "5",
+  )) 
+
+names(stu) <- gsub(pattern = "please_rate_your_experience_in_the_following_technical_skills_note_1_not_experienced_and_5_extremely_experienced_",
+                  replacement = "",
+                  x = names(stu))
+
+stu$time_commitment[stu$time_commitment == "Less than 5 hours per week"] <- "1"
+stu$time_commitment[stu$time_commitment == "5 - 10 hours per week"] <- "2"
+stu$time_commitment[stu$time_commitment == "8 - 12 hours per week"] <- "3"
+stu$time_commitment[stu$time_commitment == "10 - 15 hours per week"] <- "4"
+stu$time_commitment[stu$time_commitment == "15 - 20 hours per week"] <- "5"
+
+stu <- stu |> 
+  mutate(across(7:33, as.numeric)) |> 
+  mutate(name = paste0(first_name," ", last_name)) |> 
+  select(name, time_commitment, 4:33) |>  
+  arrange(str_extract(name,'\\s.*$'))
+
+
+#For table 
+stu_table <- stu 
+
+names(stu_table) <- gsub(pattern = "_",
+                  replacement = " ",
+                  x = names(stu_table))
+
+names(stu_table) <- str_to_title(names(stu_table))
+
+kbl(stu_table) |> 
+  kable_material(c("hover", "striped"), full_width = F) |> 
+  scroll_box(width = "100%", height = "400px")
+
+```
+
+
+## Utility Score Formulation 
+
+In order to use the matching Algorithm, students and organizations have to be assigned a utility ratings. These ratings are formulated by comparing how similar the students' skills and nonprofit experience are to the project expectations. 
+</br>
+
+Each student receives a utility score for each organization, and each organization is assigned a utility sore for each student. This ensures that both the student's and organization's preferences are taken into account for the matching process. For example, if an organization assigns two students the same utility score, but one student has a higher utility score for that organization, this student is selected and the other student returns to the selection pool. 
+</br>
+
+The code block below was used to calculate `r stu[1,1]`'s utility rating for `r org[1,1]`. Each skill is compared by subtracting the student value from the organization's. If the result equals 0 or greater, that means the student's skill rating meets or exceeds what the organization's project requires and the skill receives a utility rating of 1. If the result is a negative number, that means the organizations requirements exceed what the student put on their survey form, and they receive a utility rating less than one, depending on how far the student's answer was from the organizations. Additionally, if a student put a 1 on a skill, which means they no background, they automatically receive a zero utility rating. Finally, all of the skill utility ratings are added up to produce one utility rating for `r stu[1,1]` and `r org[1,1]`. The higher the number, the greater the utility the student will have for that project. 
+
+```{r testing_utility, echo=TRUE}
+
+#Initial Data Manipulation
+org1 <- org[1, ] |>
+  pivot_longer(9:34, names_to = "variable", values_to = "org_value")
+stu1 <- stu[1, ] |>
+  pivot_longer(6:31, names_to = "variable", values_to = "student_value")
+
+#Assigning a utility score for each skill
+match1 <- left_join(org1, stu1, by = "variable") |>
+  mutate(
+    subtracted = student_value - org_value,
+    utility = case_when(
+      subtracted >= 0 ~ 1,
+      subtracted == -1 ~ .75,
+      subtracted == -2 ~ .5,
+      subtracted == -3 ~ .25,
+      subtracted == -4 ~ 0
+    ),
+    #if the student put 1 on their survey it means
+    #they would provide 0 utility for that skills 
+    utility = case_when(
+      student_value == 1 ~ 0,
+      TRUE ~ utility),
+    #If the students logistics don't match up with the orgs
+    #Then the utility for that student changes to 0
+    utility = case_when(
+      transportation.x == "Yes" & transportation.y == "No" ~ 0,
+      flexible_hours.x == "No" & flexible_hours.y == "Yes" ~ 0,
+      remote.x == "No" & remote.y == "Yes" ~ 0,
+      TRUE ~ utility
+    ),#If the orgs time commitment is greater than what the student
+    #is willing to work their utility is set to 0
+    utility = case_when(
+      time_commitment.x > time_commitment.y ~ 0,
+      TRUE ~ utility
+    )
+  ) 
+
+utility_score <- sum(match1$utility)
+print(paste0(stu[1,1],"'s utility for ",org[1,1], ": ", utility_score))
+```
+
+The following two code blocks loops through the dataframes twice to formulate all student utility ratings and all organization utility ratings. In addition, 
+
+### Student Utility 
+
+```{r student_utility}
+
+#utility students                                    
+column_names <- stu$name
+row_names <- org$organization
+
+uS <- matrix(nrow = length(org$project_name),
+             ncol = length(stu$name),
+             dimnames = list(row_names, column_names))
+
+for (i in 1:length(org$project_name)) {
+  for (j in 1:length(stu$name)) {
+    org1 <- org[i, ] |>
+      pivot_longer(9:34, names_to = "variable", values_to = "org_value")
+    
+    stu1 <- stu[j, ] |>
+      pivot_longer(6:31, names_to = "variable", values_to = "student_value")
+    
+    match1 <- left_join(org1, stu1, by = "variable") |>
+      mutate(
+        subtracted = student_value - org_value,
+        utility = case_when(
+          subtracted >= 0 ~ 1,
+          subtracted == -1 ~ .75,
+          subtracted == -2 ~ .5,
+          subtracted == -3 ~ .25,
+          subtracted <= -4 ~ 0
+        ),
+        utility = case_when(
+          student_value == 1 ~ 0,
+          TRUE ~ utility),
+        utility = case_when(
+          transportation.x == "Yes" & transportation.y == "No" ~ 0,
+          flexible_hours.x == "No" & flexible_hours.y == "Yes" ~ 0,
+          remote.x == "No" & remote.y == "Yes" ~ 0,
+          TRUE ~ utility
+        ),
+        utility = case_when(time_commitment.x > time_commitment.y ~ 0,
+                            TRUE ~ utility)
+      )
+    
+    utility_score <- sum(match1$utility)
+    uS[i,j] <- utility_score
+  }
+}
+
+kbl(uS) |> 
+  kable_material(c("hover", "striped"), full_width = F) |> 
+  scroll_box(width = "100%", height = "400px")
+
+```
+### Organization Utility 
+
+```{r org_utility}
+#utility organizations  
+row_names <- stu$name
+column_names <- org$project_name
+
+uO <- matrix(nrow = length(stu$name),
+             ncol = length(org$project_name),
+             dimnames = list(row_names, column_names))
+
+
+for (j in 1:length(stu$name)) {
+  for (i in 1:length(org$project_name)) {
+    org1 <- org[i,] |>
+      pivot_longer(9:34, names_to = "variable", values_to = "org_value")
+    
+    stu1 <- stu[j,] |>
+      pivot_longer(6:31, names_to = "variable", values_to = "student_value")
+    
+    match1 <- left_join(org1, stu1, by = "variable") |>
+      mutate(
+        subtracted =  org_value - student_value,
+        utility = case_when(
+          subtracted <= 0 ~ 1,
+          subtracted == 1 ~ .75,
+          subtracted == 2 ~ .5,
+          subtracted == 3 ~ .25,
+          subtracted >= 4 ~ 0
+        ),
+        utility = case_when(
+          org_value == 1 ~ 0,
+          TRUE ~ utility),
+        utility = case_when(
+          transportation.x == "Yes" & transportation.y == "No" ~ 0,
+          flexible_hours.x == "No" & flexible_hours.y == "Yes" ~ 0,
+          remote.x == "No" & remote.y == "Yes" ~ 0,
+          TRUE ~ utility
+        ),
+        utility = case_when(time_commitment.x > time_commitment.y ~ 0,
+                            TRUE ~ utility)
+      )
+    
+    utility_score <- sum(match1$utility)
+    uO[j, i] <- utility_score
+  }
+}
+
+
+kbl(uO) |> 
+  kable_material(c("hover", "striped"), full_width = F) |> 
+  scroll_box(width = "100%", height = "400px")
+```
+
+## Using the Gale Shapley Algorithm
+
+```{r gale_shapley, echo=FALSE, message=FALSE, warning=FALSE}
+
+library(matchingR)
+matching = galeShapley.marriageMarket(uS, uO)
+
+str(matching)
+print(matching$engagements)
+
+org_names <- org$project_name
+
+students_matched <- stu |> 
+  slice(matching$engagements) |> 
+  mutate(project = org_names) |> 
+  select(name, project) |> 
+  rename(student = name)
+  
+
+
+var_label(students_matched$project) <- NULL
+```
+
