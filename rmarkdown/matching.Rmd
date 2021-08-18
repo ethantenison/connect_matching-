@@ -37,6 +37,7 @@ library(Hmisc) #Helpful for annotations and labels
 library(matchingR) #Contains Gale-Shapley Algorithm
 library(kableExtra) #Package for creating customizable tables 
 library(janitor)#data cleaning package
+library(labelled) #Also dealing with labels 
 
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
@@ -68,6 +69,122 @@ org_raw <- fetch_survey(surveyID = surveys$id[org_number])
 stu_raw <- fetch_survey(surveyID = surveys$id[stu_number])
 
 ```
+
+## Fall Cohort Figures 
+
+### Project Deliverables Word Cloud 
+
+```{r figures}
+library(wordcloud)
+library(RColorBrewer)
+library(tm) # to create corpus
+library(wordcloud2)
+library(htmlwidgets)
+
+org <- org_raw
+colnames(org) <- label(org)
+org <- org |>
+  clean_names()
+
+# Create a vector containing only the text
+text <- org$project_deliverables
+
+# Create a corpus
+docs <- Corpus(VectorSource(text))
+
+# standardize corpus
+docs <- docs %>%
+  tm_map(removeNumbers) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(stripWhitespace)
+docs <- tm_map(docs, content_transformer(tolower))
+docs <- tm_map(docs, removeWords, stopwords("english"))
+
+# create a document matrix
+dtm <- TermDocumentMatrix(docs)
+matrix <- as.matrix(dtm)
+words <- sort(rowSums(matrix), decreasing = TRUE)
+df <- data.frame(word = names(words), freq = words)
+df$word <- as.character(df$word)
+target <- c("also", "project", "really", "helpful", "able", "helped", "felt", "wasnt", "etc", "asks", "move", "gave")
+"%ni%" <- Negate("%in%")
+df <- filter(df, word %ni% target)
+df$word <- as.factor(df$word)
+
+set.seed(27)
+
+
+w1 <-
+  wordcloud2(data = df,
+             color = rep_len(
+               c("#264653", "#2A9D8F", "#E9C46A", "#F4A261", "#E76F51"),
+               nrow(df)
+             ),
+             shuffle = FALSE)
+
+saveWidget(w1, "reports/project_goals_fall2021.html", selfcontained = F)
+#webshot("project_goals_fall2021.html", "project_goals_fall2021.png", vwidth = 700, vheight = 500, delay = 5)
+w1
+```
+
+### Project Buckets
+
+```{r project_buckets, fig.width=8, fig.height=4}
+buckets <- org |>
+  select(organization, 29:34) |>
+  pivot_longer(col = 2:7,
+               names_to = "bucket_",
+               values_to = "bucket") |>
+  select(organization, bucket) |>
+  drop_na() |>
+  group_by(bucket) |> 
+  count() |> 
+  mutate(bucket = case_when(
+    bucket == "Data Collection & Tool Development" ~ "Data Collection &\n Tool Development",
+    bucket == "Data Interpretation & Analysis" ~ "Data Interpretation &\n Analysis",
+    bucket == "Business Intelligence & Advanced Analytics" ~ "Business Intelligence &\n Advanced Analytics",
+    TRUE ~ bucket
+  )) |> 
+  arrange(n)
+
+
+theme_set(theme_classic())
+
+g <- ggplot(buckets, aes(x = reorder(bucket, n), y = n)) +
+  geom_bar(stat = "identity", fill = "#2A9D8F") +
+    geom_text(aes(label = n, y = n),
+    position = position_stack(vjust = 0.5),
+    size = 8) +
+  coord_flip()+
+   theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+     panel.background = element_rect(fill = "#D6D6D6"),
+    axis.line = element_blank(),
+     text = element_text(#family = "Montserrat",
+                         size = 16,
+                         face = "bold"),
+     axis.title.x = element_blank(),
+     axis.title.y = element_blank(),
+     axis.ticks = element_blank(),
+      axis.text.x=element_blank(),
+     plot.title = element_text(hjust = 0.5),
+     plot.margin = margin(10, 10, 10, 10),
+     plot.background = element_rect(fill = "#D6D6D6"),
+     legend.title = element_blank(),
+     legend.position = "none",
+     legend.background = element_rect(fill = "#D6D6D6"), 
+     
+   ) +
+  # scale_fill_manual(values = c("#487897", "#7EACCD", "#F6AC75")) +
+  labs(title = "CONNECT Fall 2021 Project buckets", y = "Number", fill = "Buckets") #+
+
+
+g
+
+
+```
+
 ## Data Cleaning
 
 The data from Qualtrics can be messy. Many of the variables names default to the question number. In order to make the variable names more descriptive, the actual question description is substituted. This causes the variable names to be rather long. To reduce the length of variable names, many of them have been renamed, and the `stringr` package was used to remove repetitive words. In addition, all of the variables used by the algorithm were converted to numeric values to ensure everything uses the same 1 through 5 scale.  
@@ -392,19 +509,25 @@ kbl(uO) |>
 library(matchingR)
 matching = galeShapley.marriageMarket(uS, uO)
 
-str(matching)
-print(matching$engagements)
+#str(matching)
+#print(matching$engagements)
 
-org_names <- org$project_name
+org_info <- org |> 
+  select(project_name, project_goal, project_deliverables)
 
 students_matched <- stu |> 
   slice(matching$engagements) |> 
-  mutate(project = org_names) |> 
-  select(name, project) |> 
+  bind_cols(org_info) |>  
+  select(name, project_name, project_goal, project_deliverables) |> 
   rename(student = name)
   
 
 
 var_label(students_matched$project) <- NULL
+
+
+kbl(students_matched) |> 
+  kable_material(c("hover", "striped"), full_width = F) |> 
+  scroll_box(width = "100%", height = "400px")
 ```
 
