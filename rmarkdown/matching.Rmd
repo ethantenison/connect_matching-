@@ -12,25 +12,17 @@ output:
     code_folding: yes
     toc: yes
     toc_float: yes
+    theme: theme.css
   html_document: 
     theme: paper
     toc: true
     toc_float:
       collapsed: false
-      smooth_scroll: false
+      smooth_scroll: TRUE
   pdf_document: default
   word_document:
     toc: yes
 ---
-<style type="text/css">
-.main-container {
-  width: 40cm;
-  max-width: 40cm;
-  min-width: 40cm;
-  margin-left: auto;
-  margin-right: 10px;
-}
-</style>
 
 ```{r setup, include=FALSE}
 library(tidyverse) #A collection of packages that use the same grammar and structure
@@ -40,6 +32,8 @@ library(matchingR) #Contains Gale-Shapley Algorithm
 library(kableExtra) #Package for creating customizable tables 
 library(janitor)#data cleaning package
 library(labelled) #Also dealing with labels 
+library(shiny)
+ 
 
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
@@ -74,9 +68,9 @@ stu_raw <- fetch_survey(surveyID = surveys$id[stu_number])
 
 ## Fall Cohort Figures 
 
-### Project Deliverables Word Cloud 
+### Project Deliverables
 
-```{r figures}
+```{r project_deliverables, fig.width=8, layout="l-body-outset"}
 library(wordcloud)
 library(RColorBrewer)
 library(tm) # to create corpus
@@ -86,7 +80,9 @@ library(htmlwidgets)
 org <- org_raw
 colnames(org) <- label(org)
 org <- org |>
-  clean_names()
+  clean_names() |> 
+  filter(which_connect_program_is_this_project_affiliated_with == "RGK Center")
+  
 
 # Create a vector containing only the text
 text <- org$project_deliverables
@@ -128,9 +124,32 @@ w1 <-
 w1
 ```
 
+```{r project_desc, layout="l-body-outset"}
+proj_des <- org |>
+  select(
+    project_name,
+    project_goal,
+    project_deliverables,
+    what_other_relevant_skills_would_be_helpful_for_your_candidate_to_have_i_e_other_languages_spoken_coding_analytical_software_professional_skills_etc_list_them_here
+  ) |>
+  rename(
+    Project = project_name,
+    Goal = project_goal,
+    Deliverables = project_deliverables,
+    "Other Considerations" = what_other_relevant_skills_would_be_helpful_for_your_candidate_to_have_i_e_other_languages_spoken_coding_analytical_software_professional_skills_etc_list_them_here
+  ) |> 
+  arrange(Project) |> 
+  mutate(`Other Considerations` = replace_na(`Other Considerations`, ""))
+
+
+kbl(proj_des) |> 
+  kable_minimal("hover", full_width = T) |> 
+  scroll_box(width = "100%", height = "600px")
+```
+
 ### Project Buckets
 
-```{r project_buckets, fig.width=8, fig.height=4}
+```{r project_buckets, fig.width=8, fig.height=4, layout="l-body-outset"}
 buckets <- org |>
   select(organization, 29:34) |>
   pivot_longer(col = 2:7,
@@ -188,7 +207,7 @@ g
 
 ### Student Skills
 
-```{r student_skills, fig.width=8, fig.height=7}
+```{r student_skills, fig.width=8, fig.height=7, layout="l-body-outset"}
 
 stu <- stu_raw
 colnames(stu) <- label(stu)
@@ -254,11 +273,13 @@ g
 
 ## Data Cleaning
 
-The data from Qualtrics can be messy. Many of the variables names default to the question number. In order to make the variable names more descriptive, the actual question description is substituted. This causes the variable names to be rather long. To reduce the length of variable names, many of them have been renamed, and the `stringr` package was used to remove repetitive words. In addition, all of the variables used by the algorithm were converted to numeric values to ensure everything uses the same 1 through 5 scale.  
+The data from Qualtrics can be messy. Many of the variables names default to the question number. In order to make the variable names more descriptive, the actual question description is substituted. This causes the variable names to be rather long. To reduce the length of variable names, many of them have been renamed, and the `stringr` package was used to remove repetitive words.  
 
 ### Organizations 
 
-```{r data_pull_old, message=FALSE, warning=FALSE}
+Ordinal questions for both student and organization surveys were converted to a numeric scale. For example, for the question "How much working or volunteering with nonprofits should your candidate have?" the responses were converted from 1 to 5, with "No experience required" being 1 and "2 or more years" being 5. This is done because the algorithm can only compare numeric values.  
+
+```{r org_cleaning, message=FALSE, warning=FALSE, layout="l-body-outset"}
 org <- org_raw
 
 #Assigning variable names
@@ -324,7 +345,7 @@ org <- org |>
 
 #For Table 
 org_table <- org |> 
-  select(-c(organization,project_deliverables, project_goal))
+  select(-c(organization,project_deliverables, project_goal)) 
 
 names(org_table) <- gsub(pattern = "_",
                   replacement = " ",
@@ -332,14 +353,30 @@ names(org_table) <- gsub(pattern = "_",
 
 names(org_table) <- str_to_title(names(org_table))
 
-kbl(org_table) |>
-  kable_material(c("hover", "striped"), full_width = F) |>
+cell_color <- function(x) {
+  x = cell_spec(x,
+                color = spec_color(x, end = .7),
+                bold = T,
+                )
+}
+
+org_table <- org_table |> 
+  select(-Transportation,-`Flexible Hours`, -Remote, everything()) |> 
+  mutate(across(2:28, cell_color))
+
+kbl(org_table, escape = F) |>
+  kable_material(c("hover", "striped", "condensed"), full_width = F) |>
   scroll_box(width = "100%", height = "400px")
 ```
 
+Overall, `r length(org$organization)` organizations were included in this cohort. 
+
 ### Students
 
-```{r org_clean, message=FALSE, warning=FALSE}
+The student survey data is cleaned almost exactly the same, apart from the wording of certain questions. 
+
+
+```{r org_clean, message=FALSE, warning=FALSE, layout="l-body-outset"}
 
 stu <- stu_raw
 
@@ -409,16 +446,16 @@ cell_color <- function(x) {
 }
 
 stu_table <- stu_table |> 
-  mutate(across(6:31, cell_color))
+  select(-Transportation,-`Flexible Hours`, -Remote, everything()) |> 
+  mutate(across(2:28, cell_color))
 
-# stu_table$`Program Evaluation` = cell_spec(stu_table$`Program Evaluation`, color = ifelse(stu_table$`Program Evaluation` > 3, "red", "blue"))
 
 kbl(stu_table, escape = F) |> 
-  kable_material(c("hover", "striped"), full_width = F) |> 
+  kable_material(c("hover", "striped", "condensed"), full_width = F) |> 
   scroll_box(width = "100%", height = "400px")
 
 ```
-
+Overall, `r length(stu$name)` students applied during this cohort. 
 
 ## Utility Score Formulation 
 
@@ -426,7 +463,8 @@ In order to use the matching Algorithm, students and organizations have to be as
 </br>
 
 Each student receives a utility score for each organization, and each organization is assigned a utility sore for each student. This ensures that both the student's and organization's preferences are taken into account for the matching process. For example, if an organization assigns two students the same utility score, but one student has a higher utility score for that organization, this student is selected and the other student returns to the selection pool. 
-</br>
+
+### Utility Score Example 
 
 The code block below was used to calculate `r stu[1,1]`'s utility rating for `r org[1,1]`. Each skill is compared by subtracting the student value from the organization's. If the result equals 0 or greater, that means the student's skill rating meets or exceeds what the organization's project requires and the skill receives a utility rating of 1. If the result is a negative number, that means the organizations requirements exceed what the student put on their survey form, and they receive a utility rating less than one, depending on how far the student's answer was from the organizations. Additionally, if a student put a 1 on a skill, which means they no background, they automatically receive a zero utility rating. Finally, all of the skill utility ratings are added up to produce one utility rating for `r stu[1,1]` and `r org[1,1]`. The higher the number, the greater the utility the student will have for that project. 
 
@@ -473,11 +511,8 @@ utility_score <- sum(match1$utility)
 print(paste0(stu[1,1],"'s utility for ",org[1,1], ": ", utility_score))
 ```
 
-The following two code blocks loops through the dataframes twice to formulate all student utility ratings and all organization utility ratings. In addition, 
 
-### Student Utility Scores
-
-```{r student_utility}
+```{r student_utility, include=FALSE}
 
 #utility students                                    
 column_names <- stu$name
@@ -521,16 +556,20 @@ for (i in 1:length(org$project_name)) {
     utility_score <- sum(match1$utility)
     uS[i,j] <- utility_score
   }
+  
 }
 
-kbl(uS) |> 
-  kable_material(c("hover", "striped"), full_width = F) |> 
+kbl(uS, escape = F) |> 
+  kable_material(c("hover", "striped", "condensed"), full_width = F) |> 
   scroll_box(width = "100%", height = "400px")
 
 ```
 ### Organization Utility Scores
 
-```{r org_utility}
+For simplicity sake, only the organization utility scores are shown below because their preference matters more in the event of an unsuitable first match. Higher organization utility scores mean that the student is better suited to the organization's project.  
+
+
+```{r org_utility, layout="l-body-outset"}
 #utility organizations  
 row_names <- stu$name
 column_names <- org$project_name
@@ -577,37 +616,44 @@ for (j in 1:length(stu$name)) {
 }
 
 
-kbl(uO) |> 
-  kable_material(c("hover", "striped"), full_width = F) |> 
+kbl(uO, escape = F) |> 
+  kable_material(c("hover", "striped", "condensed"), full_width = F) |> 
   scroll_box(width = "100%", height = "400px")
 ```
 
 ## Using the Gale Shapley Algorithm
 
-```{r gale_shapley, echo=FALSE, message=FALSE, warning=FALSE}
+The `matchingR` package was used to quickly compute Gale-Shapley algorithm. The algorithm itself was devised to create satisfactory matches between two parties, in this case between organizations and students. You can find a full description of the pacakge and literature behind Gale-Shapley [here](https://cran.r-project.org/web/packages/matchingR/vignettes/matchingR-intro.html)
+
+```{r gale_shapley, echo=FALSE, message=FALSE, warning=FALSE, layout="l-body-outset"}
 
 library(matchingR)
 matching = galeShapley.marriageMarket(uS, uO)
 
-#str(matching)
-#print(matching$engagements)
 
 org_info <- org |> 
   select(project_name, project_goal, project_deliverables)
 
+uO2 <- as.data.frame(uO)
+org_options <- tibble::rownames_to_column(uO2, "Student") |> 
+  slice_max(`Andy Roddick Foundation`, n = 5)
+
 students_matched <- stu |> 
   slice(matching$engagements) |> 
   bind_cols(org_info) |>  
-  select(name, project_name, project_goal, project_deliverables) |> 
-  rename(student = name)
+  select(name, project_name) |> 
+  rename(Student = name, 
+         Project = project_name)
   
 
+var_label(students_matched$Project) <- NULL
 
-var_label(students_matched$project) <- NULL
+
 
 
 kbl(students_matched) |> 
-  kable_material(c("hover", "striped"), full_width = F) |> 
+  kable_material(c("hover", "striped", "condensed"), full_width = F) |> 
   scroll_box(width = "100%", height = "400px")
 ```
+
 
