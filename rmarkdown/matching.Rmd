@@ -24,9 +24,11 @@ output:
 ---
 <style type="text/css">
 .main-container {
-  max-width: 1800px;
+  width: 40cm;
+  max-width: 40cm;
+  min-width: 40cm;
   margin-left: auto;
-  margin-right: auto;
+  margin-right: 10px;
 }
 </style>
 
@@ -122,8 +124,7 @@ w1 <-
              ),
              shuffle = FALSE)
 
-saveWidget(w1, "reports/project_goals_fall2021.html", selfcontained = F)
-#webshot("project_goals_fall2021.html", "project_goals_fall2021.png", vwidth = 700, vheight = 500, delay = 5)
+
 w1
 ```
 
@@ -182,6 +183,72 @@ g <- ggplot(buckets, aes(x = reorder(bucket, n), y = n)) +
 
 g
 
+
+```
+
+### Student Skills
+
+```{r student_skills, fig.width=8, fig.height=7}
+
+stu <- stu_raw
+colnames(stu) <- label(stu)
+
+stu <- stu |> 
+  clean_names() |> 
+  filter(progress == 100) |> 
+  select(first_name, 64:88)
+
+names(stu) <- gsub(pattern = "please_rate_your_experience_in_the_following_technical_skills_note_1_not_experienced_and_5_extremely_experienced_",
+                  replacement = "",
+                  x = names(stu))
+
+names(stu) <- gsub(pattern = "_",
+                  replacement = " ",
+                  x = names(stu))
+
+names(stu) <- str_to_title(names(stu))
+
+stu2 <- stu |>
+  pivot_longer(col = 2:26,
+               names_to = "Skill",
+               values_to = "Rating") |>
+  mutate(Rating = na_if(Rating, 1)) |> 
+  drop_na() |> 
+  group_by(Skill) |> 
+  count()
+
+theme_set(theme_classic())
+
+g <- ggplot(stu2, aes(x = reorder(Skill, n), y = n)) +
+  geom_bar(stat = "identity", fill = "#F4A261") +
+    geom_text(aes(label = n, y = n),
+    position = position_stack(vjust = 0.5),
+    size = 8) +
+  coord_flip()+
+   theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+     panel.background = element_rect(fill = "#D6D6D6"),
+    axis.line = element_blank(),
+     text = element_text(#family = "Montserrat",
+                         size = 16,
+                         face = "bold"),
+     axis.title.x = element_blank(),
+     axis.title.y = element_blank(),
+     axis.ticks = element_blank(),
+      axis.text.x=element_blank(),
+     plot.title = element_text(hjust = 0.5),
+     plot.margin = margin(10, 10, 10, 10),
+     plot.background = element_rect(fill = "#D6D6D6"),
+     legend.title = element_blank(),
+     legend.position = "none",
+     legend.background = element_rect(fill = "#D6D6D6"), 
+     
+   ) +
+  labs(title = "CONNECT Fall 2021 Student Skills") #+
+
+
+g
 
 ```
 
@@ -333,7 +400,20 @@ names(stu_table) <- gsub(pattern = "_",
 
 names(stu_table) <- str_to_title(names(stu_table))
 
-kbl(stu_table) |> 
+
+cell_color <- function(x) {
+  x = cell_spec(x,
+                color = spec_color(x, end = .7),
+                bold = T,
+                )
+}
+
+stu_table <- stu_table |> 
+  mutate(across(6:31, cell_color))
+
+# stu_table$`Program Evaluation` = cell_spec(stu_table$`Program Evaluation`, color = ifelse(stu_table$`Program Evaluation` > 3, "red", "blue"))
+
+kbl(stu_table, escape = F) |> 
   kable_material(c("hover", "striped"), full_width = F) |> 
   scroll_box(width = "100%", height = "400px")
 
@@ -395,7 +475,7 @@ print(paste0(stu[1,1],"'s utility for ",org[1,1], ": ", utility_score))
 
 The following two code blocks loops through the dataframes twice to formulate all student utility ratings and all organization utility ratings. In addition, 
 
-### Student Utility 
+### Student Utility Scores
 
 ```{r student_utility}
 
@@ -448,7 +528,7 @@ kbl(uS) |>
   scroll_box(width = "100%", height = "400px")
 
 ```
-### Organization Utility 
+### Organization Utility Scores
 
 ```{r org_utility}
 #utility organizations  
