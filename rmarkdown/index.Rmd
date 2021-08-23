@@ -13,26 +13,21 @@ output:
     toc: yes
     toc_float: yes
     theme: theme.css
-  html_document: 
-    theme: theme.css
-    toc: true
-    toc_float:
-      collapsed: false
-      smooth_scroll: TRUE
   pdf_document: default
   word_document:
     toc: yes
 ---
 
 ```{r setup, include=FALSE}
-library(tidyverse) #A collection of packages that use the same grammar and structure
-library(qualtRics) #For connecting to Qualtrics API
-library(Hmisc) #Helpful for annotations and labels
-library(matchingR) #Contains Gale-Shapley Algorithm
-library(kableExtra) #Package for creating customizable tables 
-library(janitor)#data cleaning package
-library(labelled) #Also dealing with labels 
-library(shiny)
+library(tidyverse)  #A collection of packages that use the same grammar and structure
+library(qualtRics)  #For connecting to Qualtrics API
+library(Hmisc)      #Helpful for annotations and labels
+library(matchingR)  #Contains Gale-Shapley Algorithm
+library(kableExtra) #Package for creating customizable tables
+library(janitor)    #data cleaning package
+library(labelled)   #Also dealing with labels
+library(shiny)      #Data Dashboard package 
+library(bslib)
  
 
 knitr::opts_chunk$set(echo = TRUE)
@@ -40,12 +35,12 @@ knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 
 ```
 
-Every semester the CONNECT Program pairs community organizations with graduate students with data and evaluation skills. As the program has expanded, the matching process has become more complicated, necesitating improved program efficiency. The following document outlines how survey data is taken from Qualtrics, cleaned and sorted, and then matched using the Gale-Shapley Algorithm. Some descriptive data visualizations were included as well to give program managers a snap shot of the semester cohort. 
+Every semester the CONNECT Program pairs community organizations with graduate students with data and evaluation skills. As the program has expanded, the matching process has become more complicated, necessitating improved program efficiency. The following document outlines how survey data is taken from Qualtrics, cleaned and sorted, and then matched using the Gale-Shapley Algorithm. Some descriptive data visualizations were included as well to give program managers a snap shot of the semester cohort. 
 
 
 # Qualtrics
 
-Using the `qualtRics` package the organization and student surveys were pulled directly from Qualtrics. In order to connect to the Qualtrics API, you must have UT staff privledges. Any UT student must have their privledges updated by contacting UT IT Services. Your Qualtrics API can be accessed through account settings in the "Qualtrics IDs" section. 
+Using the `qualtRics` package the organization and student surveys were pulled directly from Qualtrics. In order to connect to the Qualtrics API, you must have UT staff privileges. Any UT student must have their privileges updated by contacting UT IT Services. Your Qualtrics API can be accessed through account settings in the "Qualtrics IDs" section. 
 
 ```{r qualtrics, message=FALSE, warning=FALSE, echo=TRUE, results='hide'}
 
@@ -70,11 +65,11 @@ stu_raw <- fetch_survey(surveyID = surveys$id[stu_number], force_request = TRUE)
 ```
 
 
-# Project Deliverables Wordcloud
+# Project Wordcloud
 
-Project CONNECT continues to offer a diverse set of projects to students. The word cloud below shows the most common words located in the project deliverables section. 
+Project CONNECT continues to offer a diverse set of projects to students. The word cloud below shows the most common words located in the project deliverable section. 
 
-```{r project_deliverables, fig.width=8}
+```{r project_deliverables, fig.width=8, message=FALSE, warning=FALSE}
 library(wordcloud)
 library(RColorBrewer)
 library(tm) # to create corpus
@@ -129,7 +124,7 @@ w1
 ```
 # Project Description Table 
 
-```{r project_desc, layout="l-body-outset"}
+```{r project_desc, message=FALSE, warning=FALSE, layout="l-body-outset"}
 proj_des <- org |>
   select(
     project_name,
@@ -156,10 +151,10 @@ kbl(proj_des, escape = F) |>
 
 # Project Buckets
 
-There were `r length(org$organization)` projects, but some of them involve multiple buckets. Of note, this semester there were zero web design projects.
+There were `r length(org$organization)` projects, but some of them involve multiple buckets. Of note, this semester there were zero web design projects. Projects that were continuations from previous semester, or were pre-matched were also not included. 
 
 
-```{r project_buckets, fig.width=8, fig.height=4}
+```{r project_buckets, fig.height=4, fig.width=8, message=FALSE, warning=FALSE}
 buckets <- org |>
   select(organization, 29:34) |>
   pivot_longer(col = 2:7,
@@ -213,9 +208,9 @@ g
 
 # Student Skills
 
-The following chart was constructed by counting every student who put at least a 2 under each skill. 
+The following chart was constructed by counting every student who put at least a 2 under each skill. The most popular skills were Microsoft Office Suite and program evaluation skills. Those that selected outcomes definition and logic modeling were much fewer in comparison to program evaluation. Therefore, it might make sense next semester to remove program evaluation and focus on specific program evaluation skills. 
 
-```{r student_skills, fig.width=8, fig.height=6}
+```{r student_skills, fig.height=6, fig.width=8, message=FALSE, warning=FALSE}
 
 stu <- stu_raw
 colnames(stu) <- label(stu)
@@ -277,11 +272,8 @@ g
 
 ```
 
-# Data Cleaning
-
-The data from Qualtrics can be messy. Many of the variables names default to the question number. In order to make the variable names more descriptive, the actual question description is substituted. This causes the variable names to be rather long. To reduce the length of variable names, many of them have been renamed, and the `stringr` package was used to remove repetitive words.  
-
-### Cleaned Organization Data 
+ 
+# Organization Data 
 
 Ordinal questions for both student and organization surveys were converted to a numeric scale. For example, for the question "How much working or volunteering with nonprofits should your candidate have?" the responses were converted from 1 to 5, with "No experience required" being 1 and "2 or more years" being 5. This is done because the algorithm can only compare numeric values.  
 
@@ -290,6 +282,7 @@ org <- org_raw
 
 #Assigning variable names
 colnames(org) <- label(org)
+
 
 org <- org |>
   clean_names() |>
@@ -301,7 +294,16 @@ org <- org |>
     flexible_hours = will_your_project_permit_flexible_work_hours,
     remote = will_your_candidate_be_able_to_work_remotely,
     nonprofit_experience = how_much_experience_working_or_volunteering_with_nonprofits_should_your_candidate_have_working_or_volunteering_for_nonprofits
-  ) |>
+  ) 
+
+
+org_mapping <- org |>
+  select(organization,
+        organization_address,
+        organization_website
+        )
+  
+org <- org |>
   select(
     organization,
     project_name,
@@ -378,8 +380,10 @@ kbl(org_table, escape = F) |>
 <b style='color: #E76F51 !important;' align="center"> Overall, `r length(org$organization)` organizations were included in this cohort. </b>
 </br>
 
-### Cleaned Student Data 
 
+# Student Data 
+
+Because CONNECT uses a formalized survey structure, the data cleaning process for student and organization survey data is virtually the same. The table below includes student skills and experience ratings as well as answers from logistics questions. 
 
 ```{r org_clean, message=FALSE, warning=FALSE, layout="l-body-outset"}
 
@@ -467,11 +471,11 @@ kbl(stu_table, escape = F) |>
 <b style='color: #E76F51 !important;' align="center"> Overall, `r length(stu$name)` students applied during this cohort. </b>
 </br>
 
-### Other relevant skills and desired population
+### Other student information 
 
-The following table includes student's other relevant skills and their desired target population, which is a new question we added for this cohort. 
+The following table includes students' responses to open ended questions. It's impossible to list every single skill that might be relevant for a project on the survey (although we have tried), so the relevant skills question is attempt to fill that gap. In addition, for the first time a question about target population was added to the survey. This came out of our diversity, equity, and inclusion evaluation that was conducted during our summer cohort. Students voiced their desire to specify which populations they are most interested in. As an open ended question, we can not use target population in the algorithm in its present state. However, we will have the opportunity to improve the question methodology in subsequent cohorts to give students more of a say in the organizations they work with. 
 
-```{r desired_pop, layout="l-body-outset"}
+```{r desired_pop, message=FALSE, warning=FALSE, layout="l-body-outset"}
 stu_table2 <- stu |> 
   select(name, relevant_skills, target_population) |> 
   mutate(relevant_skills = replace_na(relevant_skills, ""),
@@ -493,19 +497,18 @@ kbl(stu_table2, escape = F) |>
 # Utility Score Formulation 
 
 In order to use the matching Algorithm, students and organizations have to be assigned a utility ratings. These ratings are formulated by comparing how similar the students' skills and nonprofit experience are to the project expectations. 
-</br>
 
 Each student receives a utility score for each organization, and each organization is assigned a utility sore for each student. This ensures that both the student's and organization's rankings are taken into account for the matching process. For example, if an organization assigns two students the same utility score, but one student has a higher utility score for that organization, this student is selected and the other student returns to the selection pool. 
 
 ### Utility Score Example 
 
-The code block below was used to calculate `r stu[1,1]`'s utility rating for `r org[1,1]`. Each skill is compared by subtracting the student value from the organization's. If the result equals 0 or greater, that means the student's skill rating meets or exceeds what the organization's project requires and the skill receives a utility rating of 1. If the result is a negative number, that means the organizations requirements exceed what the student put on their survey form, and they receive a utility rating less than one, depending on how far the student's answer was from the organizations. 
+The following section illustrates how utility scores are formulated. The code block below was used to calculate `r stu[1,1]`'s utility rating for `r org[1,1]`. Each skill is compared by subtracting the student value from the organization's. If the result equals 0 or greater, that means the student's skill rating meets or exceeds what the organization's project requires and the skill receives a utility rating of 1. If the result is a negative number, that means the organizations requirements exceed what the student put on their survey form, and they receive a utility rating less than one, depending on how far the student's answer was from the organizations. 
 
 Additionally, if a student put a 1 on a skill, which means they have no background in it, they automatically receive a zero utility rating. Students who don't match the organization based on the logistics questions, also receive a utility rating of zero. 
 
 Finally, all of the skill utility ratings are added up to produce one utility rating for `r stu[1,1]` and `r org[1,1]`. The higher the number, the greater the utility the student will have for that project. 
 
-```{r testing_utility, echo=TRUE}
+```{r testing_utility, echo=TRUE, message=FALSE, warning=FALSE}
 
 #Initial Data Manipulation
 org1 <- org[1, ] |>
@@ -550,7 +553,7 @@ print(paste0(stu[1,1],"'s utility for ",org[1,1], ": ", utility_score))
 
 
 
-```{r student_utility, include=FALSE}
+```{r student_utility, message=FALSE, warning=FALSE, include=FALSE}
 
 #utility students                                    
 column_names <- stu$name
@@ -604,10 +607,10 @@ kbl(uS, escape = F) |>
 ```
 ### Organization Utility Scores
 
-For simplicity sake, only the organization utility scores are shown below because their preference matters more in the event of an unsuitable first match. Higher organization utility scores mean that the student is better suited to the organization's project.  
+For simplicity sake, only the organization utility scores are shown below because their preference matters more in the event of an unsuitable first match. Higher organization utility scores mean that the student is better suited to the organization's project. These ratings can be validated by reviewing students resumes when necessary.
 
 
-```{r org_utility, layout="l-body-outset"}
+```{r org_utility, message=FALSE, warning=FALSE, layout="l-body-outset"}
 #utility organizations  
 row_names <- stu$name
 column_names <- org$project_name
@@ -674,9 +677,9 @@ kbl(uO_table, escape = F) |>
 
 # The Gale Shapley Algorithm
 
-The `matchingR` package was used to quickly compute Gale-Shapley algorithm. The algorithm itself was devised to create satisfactory matches between two parties, in this case between organizations and students. You can find a full description of the pacakge and literature behind Gale-Shapley [here](https://cran.r-project.org/web/packages/matchingR/vignettes/matchingR-intro.html).
+The `matchingR` package was used to quickly compute the Gale-Shapley algorithm. The algorithm was devised to create satisfactory matches between two parties, in this case between organizations and students. It has been used commercially on match making websites, in college admissions, and by the healthcare industry to match organ donors with organ recipients. The former being the major impetus for the creators to receive the Nobel Prize in Economics in 2012. You can find a full description of the package and literature behind the Gale-Shapley algorithm [here](https://cran.r-project.org/web/packages/matchingR/vignettes/matchingR-intro.html).
 
-```{r gale_shapley, echo=FALSE}
+```{r gale_shapley, echo=FALSE, message=TRUE, warning=FALSE}
 
 #Matching Algorithm 
 library(matchingR)
@@ -687,11 +690,11 @@ matching = galeShapley.marriageMarket(uS, uO)
 
 # Matching Results
 
-The table below shows the matching results. It also shows a list of the top three scorers for each project. For projects where there were ties, all of the ties are listed as well. Program managers can use this list to help find a match if the first wasn't suitable. 
+The table below shows the matching results. Matches should be validated by reviewing student resumes to ensure they have relevant work experience. The table also shows a list of all the top scorers for each project. Program managers can use this list to help them find a match if the first wasn't suitable.
 
 ```{r results, message=FALSE, warning=FALSE, layout="l-body-outset"}
 
-#Creating a list of top scorerers
+#Creating a list of top scorers
 uO2 <- as.data.frame(uO)
 org_options <- tibble::rownames_to_column(uO2, "Student") 
 tops <- list()
@@ -706,7 +709,7 @@ tops[[i]] <- paste(org_top$Student, collapse=", ")
 tops <- tops[-1]
 top_df <- data.frame(matrix(unlist(tops), nrow=length(tops), byrow=TRUE))
 
-#Creating a dataframe for table 
+#Creating a data frame for table 
 org_info <- org |> 
   select(project_name)
 
@@ -728,4 +731,13 @@ kbl(students_matched) |>
   kable_minimal("hover", full_width = T) |> 
   scroll_box(width = "100%", height = "600px")
 
+```
+
+
+<br>
+<br>
+<br>
+
+```{r echo=FALSE, fig.align='center', message=FALSE, warning=FALSE, out.width='70%'}
+knitr::include_graphics("C:/Users/tenis/Desktop/Data_Projects/connect_matching/reports/RGB_formal_RGK.png")
 ```
