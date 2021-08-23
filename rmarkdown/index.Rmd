@@ -738,6 +738,5 @@ kbl(students_matched) |>
 <br>
 <br>
 
-```{r echo=FALSE, fig.align='center', message=FALSE, warning=FALSE, out.width='70%'}
-knitr::include_graphics("C:/Users/tenis/Desktop/Data_Projects/connect_matching/reports/RGB_formal_RGK.png")
-```
+<img src="C:/Users/tenis/Desktop/Data_Projects/connect_matching/reports/RGB_formal_RGK.png" alt="RGK Center">
+
