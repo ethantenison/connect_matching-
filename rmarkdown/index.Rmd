@@ -67,7 +67,7 @@ stu_raw <- fetch_survey(surveyID = surveys$id[stu_number], force_request = TRUE)
 
 # Project Wordcloud
 
-Project CONNECT continues to offer a diverse set of projects to students. The word cloud below shows the most common words located in the project deliverable section. 
+Project CONNECT continues to offer a diverse set of projects to students. The word cloud below shows the most common words located in the project deliverable section. What's clear about this cohort is that data is king, and we a wide variety of projects and deliverables. 
 
 ```{r project_deliverables, fig.width=8, message=FALSE, warning=FALSE}
 library(wordcloud)
