@@ -124,6 +124,8 @@ w1
 ```
 # Project Description Table 
 
+Each project is unique, and some are more complex than others. When you are evaluating who should be placed with what organizations, it's important to keep in my the project goals and deliverables, even if they end up changing. The table below was pulled directly from the organization surveys, and it outlines the project goals, deliverables, and extra considerations. 
+
 ```{r project_desc, message=FALSE, warning=FALSE, layout="l-body-outset"}
 proj_des <- org |>
   select(
