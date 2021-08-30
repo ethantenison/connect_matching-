@@ -26,9 +26,9 @@ library(matchingR)  #Contains Gale-Shapley Algorithm
 library(kableExtra) #Package for creating customizable tables
 library(janitor)    #data cleaning package
 library(labelled)   #Also dealing with labels
-library(shiny)      #Data Dashboard package 
-library(bslib)
- 
+library(plotly)     #For interactive ploting
+library(htmltools)  #for html widgets 
+
 
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
@@ -274,7 +274,7 @@ g
 
 ```
 
- 
+
 # Organization Data 
 
 Ordinal questions for both student and organization surveys were converted to a numeric scale. For example, for the question "How much working or volunteering with nonprofits should your candidate have?" the responses were converted from 1 to 5, with "No experience required" being 1 and "2 or more years" being 5. This is done because the algorithm can only compare numeric values.  
@@ -381,6 +381,39 @@ kbl(org_table, escape = F) |>
 
 <b style='color: #E76F51 !important;' align="center"> Overall, `r length(org$organization)` organizations were included in this cohort. </b>
 </br>
+
+```{r org_skill_fix, message=FALSE, warning=FALSE, include=FALSE}
+# Organizations to adjust 
+# 
+# PelotonU deleted 
+# Austin Asian Impact
+# Andy Roddick Foundation
+# Texas Rural Funders deleted
+# Bastrop County Cares
+org <- org |> 
+  mutate(microsoft_office_suite = case_when(
+    organization == "Austin Asian Impact" ~ 3,
+    TRUE ~ microsoft_office_suite
+  ), 
+  power_bi = case_when(
+    organization == "Austin Asian Impact" ~ 5,
+    TRUE ~ power_bi
+  ),
+  python = case_when(
+    organization == "Austin Asian Impact" ~ 3,
+    organization == "Andy Roddick Foundation" ~ 3,
+    TRUE ~ python
+  ),
+  google_data_studio = case_when(
+    organization == "Bastrop County Cares" ~ 5,
+    TRUE ~ google_data_studio
+  ))
+
+
+
+
+
+```
 
 
 # Student Data 
