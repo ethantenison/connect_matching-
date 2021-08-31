@@ -312,7 +312,7 @@ colnames(org) <- label(org)
 org <- org |>
   clean_names() |>
   #Specify here which school to filter by
-  filter(which_connect_program_is_this_project_affiliated_with == "RGK Center") |>
+  filter(which_connect_program_is_this_project_affiliated_with == "UT-Dallas") |>
   rename(
     time_commitment = realistically_how_much_time_do_you_expect_your_student_to_commit_per_week_working_on_your_assigned_project,
     transportation = does_your_candidate_need_to_have_access_to_transportation,
@@ -405,39 +405,6 @@ kbl(org_table, escape = F) |>
 <b style='color: #E76F51 !important;' align="center"> Overall, `r length(org$organization)` organizations were included in this cohort. </b>
 </br>
 
-```{r org_skill_fix, message=FALSE, warning=FALSE, include=FALSE}
-# Organizations to adjust 
-# 
-# PelotonU deleted 
-# Austin Asian Impact
-# Andy Roddick Foundation
-# Texas Rural Funders deleted
-# Bastrop County Cares
-org <- org |> 
-  mutate(microsoft_office_suite = case_when(
-    organization == "Austin Asian Impact" ~ 3,
-    TRUE ~ microsoft_office_suite
-  ), 
-  power_bi = case_when(
-    organization == "Austin Asian Impact" ~ 5,
-    TRUE ~ power_bi
-  ),
-  python = case_when(
-    organization == "Austin Asian Impact" ~ 3,
-    organization == "Andy Roddick Foundation" ~ 3,
-    TRUE ~ python
-  ),
-  google_data_studio = case_when(
-    organization == "Bastrop County Cares" ~ 5,
-    TRUE ~ google_data_studio
-  ))
-
-
-
-
-
-```
-
 
 # Student Data 
 
@@ -455,13 +422,13 @@ stu <- stu |>
   select(
     first_name,
     last_name,
-    is_there_any_additional_information_regarding_your_availability_that_we_should_know_about,
+    do_you_have_other_relevant_skills_that_may_be_helpful_for_us_to_know_about_i_e_other_languages_spoken_list_them_here_note_please_separate_each_skill_with_a_comma,
     do_you_have_access_to_transportation,
     do_you_need_flexible_work_hours,
     do_you_need_the_ability_to_work_remotely,
     realistically_how_much_time_can_you_commit_per_week_to_working_on_a_project,
     over_the_past_5_years_approximately_how_much_experience_have_you_had_working_or_directly_volunteering_with_nonprofit_organizations,
-    64:90
+    56:81
   ) |>
     rename(
       time_commitment = realistically_how_much_time_can_you_commit_per_week_to_working_on_a_project,
@@ -469,9 +436,8 @@ stu <- stu |>
       flexible_hours = do_you_need_flexible_work_hours, 
       remote = do_you_need_the_ability_to_work_remotely,
       nonprofit_experience = over_the_past_5_years_approximately_how_much_experience_have_you_had_working_or_directly_volunteering_with_nonprofit_organizations,
-      relevant_skills = do_you_have_other_relevant_skills_that_may_be_helpful_for_us_to_know_about_i_e_other_languages_spoken_list_them_here_note_separate_each_skill_with_a_comma,
-      target_population = every_semester_the_connect_program_works_with_organizations_that_serve_many_different_target_populations_are_there_any_specific_populations_that_youre_interested_in_working_with
-    ) |> 
+      relevant_skills = do_you_have_other_relevant_skills_that_may_be_helpful_for_us_to_know_about_i_e_other_languages_spoken_list_them_here_note_please_separate_each_skill_with_a_comma
+      ) |> 
   mutate(nonprofit_experience = case_when(
     nonprofit_experience == "No experience (yet!)" ~ "1",
     nonprofit_experience == "Less than 6 months" ~ "2",
@@ -480,9 +446,17 @@ stu <- stu |>
     nonprofit_experience == "2 or more years" ~ "5",
   )) 
 
-names(stu) <- gsub(pattern = "please_rate_your_experience_in_the_following_technical_skills_note_1_not_experienced_and_5_extremely_experienced_",
+names(stu) <- gsub(pattern = "please_rate_your_experience_in_the_following_skills_1_not_experienced_and_5_extremely_experienced_",
                   replacement = "",
                   x = names(stu))
+
+stu <- stu |> 
+   mutate(across(everything(), sub_text_noexp)) |> 
+   mutate(across(everything(), sub_text_exp)) |> 
+  #removing na from question that didn't have a force response
+   mutate(nonprofit_experience = replace_na(nonprofit_experience, 1))
+
+
 
 stu$time_commitment[stu$time_commitment == "Less than 5 hours per week"] <- "1"
 stu$time_commitment[stu$time_commitment == "5 - 10 hours per week"] <- "2"
@@ -490,16 +464,20 @@ stu$time_commitment[stu$time_commitment == "8 - 12 hours per week"] <- "3"
 stu$time_commitment[stu$time_commitment == "10 - 15 hours per week"] <- "4"
 stu$time_commitment[stu$time_commitment == "15 - 20 hours per week"] <- "5"
 
+
+
+
 stu <- stu |> 
-  mutate(across(7:33, as.numeric)) |> 
+  mutate(across(7:34, as.numeric)) |> 
   mutate(name = paste0(first_name," ", last_name)) |> 
-  select(name, time_commitment, 4:35) |>  
+  select(name, time_commitment, 3:34) |> 
+  #arrange dataframe by last name
   arrange(str_extract(name,'\\s.*$'))
 
 
 #For table 
 stu_table <- stu |> 
-  select(-c(relevant_skills, target_population))
+  select(-c(relevant_skills))
 
 names(stu_table) <- gsub(pattern = "_",
                   replacement = " ",
@@ -531,13 +509,12 @@ kbl(stu_table, escape = F) |>
 
 ### Other student information 
 
-The following table includes students' responses to open ended questions. It's impossible to list every single skill that might be relevant for a project on the survey (although we have tried), so the relevant skills question is attempt to fill that gap. In addition, for the first time a question about target population was added to the survey. This came out of our diversity, equity, and inclusion evaluation that was conducted during our summer cohort. Students voiced their desire to specify which populations they are most interested in. As an open ended question, we can not use target population in the algorithm in its present state. However, we will have the opportunity to improve the question methodology in subsequent cohorts to give students more of a say in the organizations they work with. 
+The following table includes students' responses to open ended questions. It's impossible to list every single skill that might be relevant for a project on the survey (although we have tried), so the relevant skills question is attempt to fill that gap.
 
 ```{r desired_pop, message=FALSE, warning=FALSE, layout="l-body-outset"}
 stu_table2 <- stu |> 
-  select(name, relevant_skills, target_population) |> 
-  mutate(relevant_skills = replace_na(relevant_skills, ""),
-         target_population = replace_na(target_population, ""))
+  select(name, relevant_skills) |> 
+  mutate(relevant_skills = replace_na(relevant_skills, ""))
 
 names(stu_table2) <- gsub(pattern = "_",
                   replacement = " ",
