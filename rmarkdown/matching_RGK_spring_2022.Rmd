@@ -1,7 +1,7 @@
 ---
 title: "CONNECT Program Matching"
 description: |
-  University of Texas at Austin, Fall 2021 
+  University of Texas at Austin, Spring 2022 
 author:
   - name: Ethan Tenison 
     affiliation: RGK Center for Philanthropy and Community Service 
@@ -38,29 +38,37 @@ knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 Every semester the CONNECT Program pairs community organizations with graduate students with data and evaluation skills. As the program has expanded, the matching process has become more complicated, necessitating improved program efficiency. The following document outlines how survey data is taken from Qualtrics, cleaned and sorted, and then matched using the Gale-Shapley Algorithm. Some descriptive data visualizations were included as well to give program managers a snap shot of the semester cohort. 
 
 
-# Qualtrics
+```{r stu, message=FALSE, warning=FALSE, echo=FALSE, results='hide'}
 
-Using the `qualtRics` package the organization and student surveys were pulled directly from Qualtrics. In order to connect to the Qualtrics API, you must have UT staff privileges. Any UT student must have their privileges updated by contacting UT IT Services. Your Qualtrics API can be accessed through account settings in the "Qualtrics IDs" section. 
+stu <- read_csv("data/raw/CONNECT_rgk_students_spring2022.csv") |> 
+  select(-c(1:17)) |> 
+  filter(!row_number() %in% c(2)) |> 
+  janitor::row_to_names(1) |> 
+  clean_names() |> 
+  rename(pronouns = preferred_pronouns_selected_choice,
+         phone = phone_number_please_do_not_include_hyphens_or_parentheses,
+         relevant_skills = do_you_have_other_relevant_skills_that_may_be_helpful_for_us_to_know_about_i_e_other_languages_spoken_list_them_here_note_separate_each_skill_with_a_comma,
+         target_population = every_semester_the_connect_program_works_with_organizations_that_serve_many_different_target_populations_are_there_any_specific_populations_that_youre_interested_in_working_with,
+         nonprofit_experience = over_the_past_5_years_approximately_how_much_experience_have_you_had_working_or_directly_volunteering_with_nonprofit_organizations,
+         schools = which_ut_schools_colleges_are_you_affiliated_with_check_all_that_apply_selected_choice,
+         schools_other = which_ut_schools_colleges_are_you_affiliated_with_check_all_that_apply_other_text,
+         international = to_comply_with_university_rules_and_regulations_please_indicate_if_you_are_an_international_student_please_note_that_this_does_not_prohibit_participation_in_this_program) |> 
+  rename_with(~ gsub('please_rate_your_experience_in_the_following_technical_skills_note_1_not_experienced_and_5_extremely_experienced_', '', .x))
+  
 
-```{r qualtrics, message=FALSE, warning=FALSE, echo=TRUE, results='hide'}
+```
 
-# Connecting to the Qualtrics API
-qualtrics_api_credentials(
-api_key = Sys.getenv("qualtrics_key"), 
-base_url = "ca1.qualtrics.com", 
-install = FALSE
-)
+```{r org, message=FALSE, warning=FALSE, echo=FALSE, results='hide'}
 
-#Pulling the organization and students surveys 
-surveys <- all_surveys() 
+org <- read_csv("data/raw/CONNECT_organization_spring2022.csv") |> 
+  select(-c(1:17)) |> 
+  filter(!row_number() %in% c(2)) |> 
+  janitor::row_to_names(1) |> 
+  clean_names() |> 
+  rename_with(~ gsub('please_rate_how_relevant_the_following_technical_skills_are_to_your_project_', '', .x)) |> 
+  rename(nonprofit_experience = "how_much_experience_working_or_volunteering_with_nonprofits_should_your_candidate_have_working_or_volunteering_for_nonprofits") |> 
+  filter(which_connect_program_is_this_project_affiliated_with == "RGK Center")
 
-#Finding the row index for organization and student surveys
-stu_number <- which(surveys$name=="08.CONNECT- Fall 2021", arr.ind=TRUE)
-org_number <- which(surveys$name=="Matching Form_Fall 2021", arr.ind=TRUE)
-
-#Fetching the Survey Contents 
-org_raw <- fetch_survey(surveyID = surveys$id[org_number], force_request = TRUE)
-stu_raw <- fetch_survey(surveyID = surveys$id[stu_number], force_request = TRUE)
 
 ```
 
@@ -75,12 +83,6 @@ library(RColorBrewer)
 library(tm) # to create corpus
 library(wordcloud2)
 library(htmlwidgets)
-
-org <- org_raw
-colnames(org) <- label(org)
-org <- org |>
-  clean_names() |> 
-  filter(which_connect_program_is_this_project_affiliated_with == "RGK Center")
   
 
 # Create a vector containing only the text
