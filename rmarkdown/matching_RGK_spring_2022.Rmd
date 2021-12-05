@@ -66,7 +66,11 @@ org <- read_csv("data/raw/CONNECT_organization_spring2022.csv") |>
   janitor::row_to_names(1) |> 
   clean_names() |> 
   rename_with(~ gsub('please_rate_how_relevant_the_following_technical_skills_are_to_your_project_', '', .x)) |> 
-  rename(nonprofit_experience = "how_much_experience_working_or_volunteering_with_nonprofits_should_your_candidate_have_working_or_volunteering_for_nonprofits") |> 
+  rename(nonprofit_experience = "how_much_experience_working_or_volunteering_with_nonprofits_should_your_candidate_have_working_or_volunteering_for_nonprofits",
+             time_commitment = realistically_how_much_time_do_you_expect_your_student_to_commit_per_week_working_on_your_assigned_project,
+    transportation = does_your_candidate_need_to_have_access_to_transportation,
+    flexible_hours = will_your_project_permit_flexible_work_hours,
+    remote = will_your_candidate_be_able_to_work_remotely) |> 
   filter(which_connect_program_is_this_project_affiliated_with == "RGK Center")
 
 
@@ -115,10 +119,6 @@ set.seed(27)
 
 w1 <-
   wordcloud2(data = df,
-             color = rep_len(
-               c("#264653", "#2A9D8F", "#E9C46A", "#F4A261", "#E76F51"),
-               nrow(df)
-             ),
              shuffle = FALSE)
 
 
@@ -160,21 +160,30 @@ There were `r length(org$organization)` projects, but some of them involve multi
 
 ```{r project_buckets, fig.height=4, fig.width=8, message=FALSE, warning=FALSE}
 buckets <- org |>
-  select(organization, 29:34) |>
-  pivot_longer(col = 2:7,
-               names_to = "bucket_",
-               values_to = "bucket") |>
-  select(organization, bucket) |>
-  drop_na() |>
-  group_by(bucket) |> 
-  count() |> 
-  mutate(bucket = case_when(
-    bucket == "Data Collection & Tool Development" ~ "Data Collection &\n Tool Development",
-    bucket == "Data Interpretation & Analysis" ~ "Data Interpretation &\n Analysis",
-    bucket == "Business Intelligence & Advanced Analytics" ~ "Business Intelligence &\n Advanced Analytics",
-    TRUE ~ bucket
-  )) |> 
-  arrange(n)
+  select(
+    organization,
+    identify_the_categories_your_project_falls_under_check_all_that_apply
+  ) |>
+  rename(bucket = identify_the_categories_your_project_falls_under_check_all_that_apply) |>
+  group_by(bucket) |>
+  count() |>
+  mutate(
+    n = as.numeric(n),
+    ### Just for RGK THIS ROUND because of duplicates 
+    n = case_when(
+      bucket == "Data Collection & Tool Development" ~ n + 2,
+      bucket == "Data Interpretation & Analysis" ~ n + 2,
+      TRUE ~ n
+    ),
+    bucket = case_when(
+      bucket == "Data Collection & Tool Development" ~ "Data Collection &\n Tool Development",
+      bucket == "Data Interpretation & Analysis" ~ "Data Interpretation &\n Analysis",
+      bucket == "Business Intelligence & Advanced Analytics" ~ "Business Intelligence &\n Advanced Analytics",
+      TRUE ~ bucket
+    )
+  ) |>
+  arrange(n) |> 
+  filter(bucket != "Data Collection & Tool Development,Data Interpretation & Analysis")
 
 
 theme_set(theme_classic())
@@ -202,7 +211,10 @@ g <- ggplot(buckets, aes(x = reorder(bucket, n), y = n)) +
      legend.position = "none",
      
    ) +
-  labs(title = "CONNECT Fall 2021 Project buckets", y = "Number", fill = "Buckets") 
+  labs(title = "CONNECT Spring 2022 Project buckets",
+       y = "Number",
+       fill = "Buckets",
+       caption = "**Two projects were double counted") 
 
 
 g
@@ -216,26 +228,17 @@ The following chart was constructed by counting every student who put at least a
 
 ```{r student_skills, fig.height=6, fig.width=8, message=FALSE, warning=FALSE}
 
-stu <- stu_raw
-colnames(stu) <- label(stu)
-
-stu <- stu |>
-  clean_names() |>
-  filter(progress == 100) |>
-  select(first_name, 64:88)
-
-names(stu) <-
-  gsub(pattern = "please_rate_your_experience_in_the_following_technical_skills_note_1_not_experienced_and_5_extremely_experienced_",
-       replacement = "",
-       x = names(stu))
-
-names(stu) <- gsub(pattern = "_",
-                   replacement = " ",
-                   x = names(stu))
-
-names(stu) <- str_to_title(names(stu))
 
 stu2 <- stu |>
+  select(first_name, 30:54)
+
+names(stu2) <- gsub(pattern = "_",
+                   replacement = " ",
+                   x = names(stu2))
+
+names(stu2) <- str_to_title(names(stu2))
+
+stu3 <- stu2 |>
   pivot_longer(col = 2:26,
                names_to = "Skill",
                values_to = "Rating") |>
@@ -247,8 +250,8 @@ stu2 <- stu |>
 
 theme_set(theme_classic())
 
-g <- ggplot(stu2, aes(x = reorder(Skill, n), y = n)) +
-  geom_bar(stat = "identity", fill = "#F4A261") +
+g <- ggplot(stu3, aes(x = reorder(Skill, n), y = n, fill = n)) +
+  geom_bar(stat = "identity") +
   geom_text(aes(label = n, y = n),
             position = position_stack(vjust = 0.5),
             size = 6) +
@@ -269,7 +272,9 @@ g <- ggplot(stu2, aes(x = reorder(Skill, n), y = n)) +
     legend.position = "none"
     
   ) +
-  labs(title = "CONNECT Fall 2021 Student Skills")
+  labs(title = "CONNECT Spring 2022 Student Skills",
+       caption = "**Calculated by summing skills rated as higher than 1") +
+   scale_fill_distiller(palette = "RdYlGn", direction = 1) 
 
 
 g
@@ -282,23 +287,7 @@ g
 Ordinal questions for both student and organization surveys were converted to a numeric scale. For example, for the question "How much working or volunteering with nonprofits should your candidate have?" the responses were converted from 1 to 5, with "No experience required" being 1 and "2 or more years" being 5. This is done because the algorithm can only compare numeric values.  
 
 ```{r org_cleaning, message=FALSE, warning=FALSE, layout="l-body-outset"}
-org <- org_raw
 
-#Assigning variable names
-colnames(org) <- label(org)
-
-
-org <- org |>
-  clean_names() |>
-  #Specify here which school to filter by
-  filter(which_connect_program_is_this_project_affiliated_with == "RGK Center") |>
-  rename(
-    time_commitment = realistically_how_much_time_do_you_expect_your_student_to_commit_per_week_working_on_your_assigned_project,
-    transportation = does_your_candidate_need_to_have_access_to_transportation,
-    flexible_hours = will_your_project_permit_flexible_work_hours,
-    remote = will_your_candidate_be_able_to_work_remotely,
-    nonprofit_experience = how_much_experience_working_or_volunteering_with_nonprofits_should_your_candidate_have_working_or_volunteering_for_nonprofits
-  ) 
 
 
 org_mapping <- org |>
@@ -307,7 +296,7 @@ org_mapping <- org |>
         organization_website
         )
   
-org <- org |>
+org2 <- org |>
   select(
     organization,
     project_name,
@@ -318,7 +307,7 @@ org <- org |>
     remote,
     time_commitment,
     nonprofit_experience,
-    40:64
+    23:47
   ) |>
   mutate(
     nonprofit_experience = case_when(
@@ -336,28 +325,14 @@ org <- org |>
       time_commitment == "15 - 20 hours per week" ~ "5"
     )
   ) |>
-  arrange(project_name)
+  arrange(project_name) |> 
+  mutate(across(9:34,~gsub("1 - Not relevant", "1", .)),
+         across(9:34,~gsub("5 - Extremely relevant", "5", .)),
+         across(8:34, as.numeric))
 
-
-names(org) <-
-  gsub(pattern = "please_rate_how_relevant_the_following_technical_skills_are_to_your_project_",
-       replacement = "",
-       x = names(org))
-
-org <- data.frame(lapply(org, function(x) {
-  gsub("1 - Not relevant", "1", x)
-}))
-
-org <- data.frame(lapply(org, function(x) {
-  gsub("5 - Extremely relevant", "5", x)
-}))
-
-
-org <- org |>
-  mutate(across(8:34, as.numeric))
 
 #For Table
-org_table <- org |>
+org_table <- org2 |>
   select(-c(organization, project_deliverables, project_goal))
 
 names(org_table) <- gsub(pattern = "_",
@@ -383,37 +358,6 @@ kbl(org_table, escape = F) |>
 
 <b style='color: #E76F51 !important;' align="center"> Overall, `r length(org$organization)` organizations were included in this cohort. </b>
 </br>
-
-```{r org_skill_fix, message=FALSE, warning=FALSE, include=FALSE}
-
-org <- org |> 
-  mutate(microsoft_office_suite = case_when(
-    organization == "Austin Asian Impact" ~ 3,
-    TRUE ~ microsoft_office_suite
-  ), 
-  power_bi = case_when(
-    organization == "Austin Asian Impact" ~ 5,
-    TRUE ~ power_bi
-  ),
-  python = case_when(
-    organization == "Austin Asian Impact" ~ 3,
-    organization == "Andy Roddick Foundation" ~ 3,
-    TRUE ~ python
-  ),
-  google_data_studio = case_when(
-    organization == "Bastrop County Cares" ~ 5,
-    TRUE ~ google_data_studio
-  ),
-  r_shiny = case_when(
-    organization == "PelotonU" ~ 5,
-    TRUE ~ r_shiny
-  ))
-
-
-
-
-
-```
 
 
 # Student Data 
