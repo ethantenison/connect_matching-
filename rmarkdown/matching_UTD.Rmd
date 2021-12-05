@@ -549,7 +549,7 @@ Finally, all of the skill utility ratings are added up to produce one utility ra
 org1 <- org[1, ] |>
   pivot_longer(9:34, names_to = "variable", values_to = "org_value")
 stu1 <- stu[1, ] |>
-  pivot_longer(6:31, names_to = "variable", values_to = "student_value")
+  pivot_longer(7:33, names_to = "variable", values_to = "student_value")
 
 #Assigning a utility score for each skill
 match1 <- left_join(org1, stu1, by = "variable") |>
@@ -604,7 +604,7 @@ for (i in 1:length(org$project_name)) {
       pivot_longer(9:34, names_to = "variable", values_to = "org_value")
     
     stu1 <- stu[j, ] |>
-      pivot_longer(6:31, names_to = "variable", values_to = "student_value")
+      pivot_longer(7:33, names_to = "variable", values_to = "student_value")
     
     match1 <- left_join(org1, stu1, by = "variable") |>
       mutate(
@@ -661,7 +661,7 @@ for (j in 1:length(stu$name)) {
       pivot_longer(9:34, names_to = "variable", values_to = "org_value")
     
     stu1 <- stu[j,] |>
-      pivot_longer(6:31, names_to = "variable", values_to = "student_value")
+      pivot_longer(7:33, names_to = "variable", values_to = "student_value")
     
     match1 <- left_join(org1, stu1, by = "variable") |>
       mutate(
@@ -701,7 +701,7 @@ cell_color <- function(x) {
 
 
 uO_table <- as.data.frame(uO) |> 
-  mutate(across(1:9, cell_color))
+  mutate(across(1:6, cell_color))
 
 
 kbl(uO_table, escape = F) |> 
@@ -743,6 +743,10 @@ tops[[i]] <- paste(org_top$Student, collapse=", ")
 
 tops <- tops[-1]
 top_df <- data.frame(matrix(unlist(tops), nrow=length(tops), byrow=TRUE))
+
+top_df$matrix.unlist.tops...nrow...length.tops...byrow...TRUE.<-
+  gsub("\\."," ",top_df$matrix.unlist.tops...nrow...length.tops...byrow...TRUE.)
+
 
 #Creating a data frame for table 
 org_info <- org |> 

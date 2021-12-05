@@ -1,7 +1,7 @@
 ---
 title: "CONNECT Program Matching"
 description: |
-  University of Texas at Austin, Spring 2022 
+  University of Texas at Dallas, Spring 2022 
 author:
   - name: Ethan Tenison 
     affiliation: RGK Center for Philanthropy and Community Service 
@@ -58,7 +58,7 @@ org <- read_csv("data/raw/CONNECT_organization_spring2022.csv") |>
     transportation = does_your_candidate_need_to_have_access_to_transportation,
     flexible_hours = will_your_project_permit_flexible_work_hours,
     remote = will_your_candidate_be_able_to_work_remotely) |> 
-  filter(which_connect_program_is_this_project_affiliated_with == "RGK Center") # Change this depending on school
+  filter(which_connect_program_is_this_project_affiliated_with == "UT-Dallas") # Change this depending on school
 
 #write.csv(org, "data/processed/utd_spring_2022.csv", row.names = FALSE)
 
@@ -176,12 +176,14 @@ buckets <- org |>
   rename(bucket = identify_the_categories_your_project_falls_under_check_all_that_apply) |>
   group_by(bucket) |>
   count() |>
+  ungroup() |> 
+  add_row(bucket = "Research", n = 1) |> 
+  add_row(bucket = "Data Interpretation & Analysis", n = 1) |>
   mutate(
     n = as.numeric(n),
-    ### Just for RGK THIS ROUND because of duplicates 
     n = case_when(
       bucket == "Data Collection & Tool Development" ~ n + 2,
-      bucket == "Data Interpretation & Analysis" ~ n + 2,
+      bucket == "Measurement Strategy" ~ n + 1,
       TRUE ~ n
     ),
     bucket = case_when(
@@ -192,7 +194,8 @@ buckets <- org |>
     )
   ) |>
   arrange(n) |> 
-  filter(bucket != "Data Collection & Tool Development,Data Interpretation & Analysis")
+  filter(bucket != "Measurement Strategy,Data Collection & Tool Development",
+           bucket != "Research,Data Collection & Tool Development,Data Interpretation & Analysis")
 
 
 theme_set(theme_classic())
@@ -225,9 +228,7 @@ g <- ggplot(buckets, aes(x = reorder(bucket, n), y = n)) +
        fill = "Buckets",
        caption = "**Two projects were double counted") 
 
-
 g
-
 
 ```
 ### Organization Location 
@@ -238,7 +239,7 @@ library(leaflet)
 register_google(Sys.getenv("google_geocode_key"))
 
 geo_o <- org |> 
-  filter(which_connect_program_is_this_project_affiliated_with == "RGK Center") |> 
+  filter(which_connect_program_is_this_project_affiliated_with == "UT-Dallas") |> 
   select(organization, organization_address) |> 
   mutate(organization_address = case_when(
     organization_address == "N/A" ~ "",
@@ -316,32 +317,31 @@ Because CONNECT uses a formalized survey structure, the data cleaning process fo
 
 ```{r org_clean, message=FALSE, warning=FALSE, layout="l-body-outset"}
 
-stu <- read_csv("data/raw/CONNECT_rgk_students_spring2022.csv") |> 
+stu <- read_csv("data/raw/CONNECT - Student Form (Spring 2022)_UTD.csv") |> 
   select(-c(1:17)) |> 
   filter(!row_number() %in% c(2)) |> 
   janitor::row_to_names(1) |> 
   clean_names() |> 
   rename(pronouns = preferred_pronouns_selected_choice,
          phone = phone_number_please_do_not_include_hyphens_or_parentheses,
-         relevant_skills = do_you_have_other_relevant_skills_that_may_be_helpful_for_us_to_know_about_i_e_other_languages_spoken_list_them_here_note_separate_each_skill_with_a_comma,
+         relevant_skills = do_you_have_other_relevant_skills_that_may_be_helpful_for_us_to_know_about_i_e_other_languages_spoken_list_them_here_note_please_separate_each_skill_with_a_comma,
          target_population = every_semester_the_connect_program_works_with_organizations_that_serve_many_different_target_populations_are_there_any_specific_populations_that_youre_interested_in_working_with,
          nonprofit_experience = over_the_past_5_years_approximately_how_much_experience_have_you_had_working_or_directly_volunteering_with_nonprofit_organizations,
-         schools = which_ut_schools_colleges_are_you_affiliated_with_check_all_that_apply_selected_choice,
-         schools_other = which_ut_schools_colleges_are_you_affiliated_with_check_all_that_apply_other_text,
+         schools = which_epps_program_s_are_you_affiliated_with,
          international = to_comply_with_university_rules_and_regulations_please_indicate_if_you_are_an_international_student_please_note_that_this_does_not_prohibit_participation_in_this_program) |> 
-  rename_with(~ gsub('please_rate_your_experience_in_the_following_technical_skills_note_1_not_experienced_and_5_extremely_experienced_', '', .x))
+  rename_with(~ gsub('please_rate_your_experience_in_the_following_skills_1_not_experienced_and_5_extremely_experienced_', '', .x))
   
 
 stu4 <- stu |> 
   select(
     first_name,
     last_name,
-    is_there_any_additional_information_regarding_your_availability_that_we_should_know_about,
+    is_there_any_additional_information_about_your_availability_that_we_should_know,
     do_you_have_access_to_transportation,
     do_you_need_flexible_work_hours,
     do_you_need_the_ability_to_work_remotely,
     realistically_how_much_time_can_you_commit_per_week_to_working_on_a_project,
-    29:56
+    29:57
   ) |>
     rename(
       time_commitment = realistically_how_much_time_can_you_commit_per_week_to_working_on_a_project,
@@ -363,14 +363,22 @@ stu4 <- stu |>
     time_commitment == "15 - 20 hours per week" ~ "5"
     
   )) |> 
-  mutate(across(7:33, as.numeric),
-         name = paste0(first_name," ", last_name))
+  mutate(across(6:34,~gsub("1 - Not relevant", "1", .)),
+         across(6:34,~gsub("5 - Extremely relevant", "5", .)),
+         across(6:34, as.numeric),
+         name = paste0(first_name," ", last_name),
+         across(6:34, ~replace_na(.x, 1)))
 
 stumas <- stu4
 
 stu4 <- stu4 |> 
-  select(name, time_commitment, 4:35) |>  
-  arrange(str_extract(name,'\\s.*$'))
+  select(name, time_commitment, 4:36) |>  
+  arrange(str_extract(name,'\\s.*$')) |> 
+  mutate(remote = as.character(remote),
+    remote = case_when(
+    remote == "1" ~ "Yes",
+    TRUE ~ remote
+  ))
 
 
 #For table 
@@ -393,7 +401,7 @@ cell_color <- function(x) {
 
 stu_table <- stu_table |> 
   select(-Transportation,-`Flexible Hours`, -Remote, everything()) |> 
-  mutate(across(2:28, cell_color))
+  mutate(across(2:24, cell_color))
 
 
 kbl(stu_table, escape = F) |> 
@@ -405,34 +413,6 @@ kbl(stu_table, escape = F) |>
 <b style='color: #E76F51 !important;' align="center"> Overall, `r length(stu4$name)` students applied during this cohort. </b>
 </br>
 
-### Student Location 
-
-We do not collect student addresses, but `Qualtrics` does record the longitude and latitude of where students fill out the form. Therefore, the following map is only an estimate of where our applicants live. 
-
-```{r student_location}
-
-stu_geo <- read_csv("data/raw/CONNECT_rgk_students_spring2022.csv") |> 
-  filter(!row_number() %in% c(2)) |> 
-  janitor::row_to_names(1) |> 
-  clean_names() |> 
-  select(first_name, last_name, location_latitude, location_longitude ) |> 
-  mutate(name = paste0(first_name, " ",last_name),
-         location_latitude = as.numeric(location_latitude),
-         location_longitude = as.numeric(location_longitude))
-
-
-# create leaflet map
-stu_map <- leaflet(stu_geo) %>%
-  addTiles() %>%
-  addMarkers(lng = ~location_longitude,
-             lat = ~location_latitude,
-             popup = ~ name)
-
-stu_map
-
-
-```
-
 
 ### Other student information 
 
@@ -440,8 +420,8 @@ The following table includes students' responses to open ended questions. It's i
 
 ```{r desired_pop, message=FALSE, warning=FALSE, layout="l-body-outset"}
 stu_table2 <- stumas |> 
-  select(name, relevant_skills, target_population, is_there_any_additional_information_regarding_your_availability_that_we_should_know_about) |>
-  rename(additional_information = is_there_any_additional_information_regarding_your_availability_that_we_should_know_about) |> 
+  select(name, relevant_skills, target_population, is_there_any_additional_information_about_your_availability_that_we_should_know) |>
+  rename(additional_information = is_there_any_additional_information_about_your_availability_that_we_should_know) |> 
   mutate(relevant_skills = replace_na(relevant_skills, ""),
          target_population = replace_na(target_population, ""),
          additional_information = replace_na(additional_information, ""))
@@ -467,7 +447,11 @@ The following chart was constructed by counting every student who put at least a
 
 
 stu2 <- stu |>
-  select(first_name, 30:54)
+  mutate(across(30:55,  ~ gsub("1 - Not relevant", "1", .)),
+         across(30:55,  ~ gsub("5 - Extremely relevant", "5", .)),
+         across(30:55, as.numeric)) |> 
+select(first_name, 30:55)
+  
 
 names(stu2) <- gsub(pattern = "_",
                    replacement = " ",
@@ -476,7 +460,7 @@ names(stu2) <- gsub(pattern = "_",
 names(stu2) <- str_to_title(names(stu2))
 
 stu3 <- stu2 |>
-  pivot_longer(col = 2:26,
+  pivot_longer(col = 2:27,
                names_to = "Skill",
                values_to = "Rating") |>
   #Setting students who put 1 to NA
@@ -538,7 +522,7 @@ Finally, all of the skill utility ratings are added up to produce one utility ra
 org1 <- org2[1, ] |>
   pivot_longer(9:34, names_to = "variable", values_to = "org_value")
 stu1 <- stu4[1, ] |>
-  pivot_longer(6:31, names_to = "variable", values_to = "student_value")
+  pivot_longer(6:32, names_to = "variable", values_to = "student_value")
 
 #Assigning a utility score for each skill
 match1 <- left_join(org1, stu1, by = "variable") |>
@@ -592,7 +576,7 @@ for (i in 1:length(org2$project_name)) {
       pivot_longer(9:34, names_to = "variable", values_to = "org_value")
     
     stu1 <- stu4[j, ] |>
-      pivot_longer(6:31, names_to = "variable", values_to = "student_value")
+      pivot_longer(6:32, names_to = "variable", values_to = "student_value")
     
     match1 <- left_join(org1, stu1, by = "variable") |>
       mutate(
@@ -649,7 +633,7 @@ for (j in 1:length(stu4$name)) {
       pivot_longer(9:34, names_to = "variable", values_to = "org_value")
     
     stu1 <- stu4[j,] |>
-      pivot_longer(6:31, names_to = "variable", values_to = "student_value")
+      pivot_longer(6:32, names_to = "variable", values_to = "student_value")
     
     match1 <- left_join(org1, stu1, by = "variable") |>
       mutate(
@@ -689,7 +673,7 @@ cell_color <- function(x) {
 
 
 uO_table <- as.data.frame(uO) |> 
-  mutate(across(1:15, cell_color))
+  mutate(across(1:6, cell_color))
 
 
 kbl(uO_table, escape = F) |> 
@@ -754,7 +738,7 @@ var_label(students_matched$Project) <- NULL
   
 kbl(students_matched) |> 
   kable_material(c("hover","striped"), full_width = F) |> 
-  scroll_box(width = "100%", height = "600px")
+  scroll_box(width = "100%", height = "450px")
 
 ```
 
@@ -762,5 +746,5 @@ kbl(students_matched) |>
 <br>
 <br>
 
-<img src="C:/Users/tenis/Desktop/Data_Projects/connect_matching/reports/RGB_formal_RGK.png" alt="RGK Center">
+<img src="C:/Users/tenis/Desktop/Data_Projects/connect_matching/reports/ut-dallas.png" alt="University of Texas at Dallas">
 
