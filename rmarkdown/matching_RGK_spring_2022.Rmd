@@ -330,7 +330,9 @@ stu <- read_csv("data/raw/CONNECT_rgk_students_spring2022.csv") |>
          schools_other = which_ut_schools_colleges_are_you_affiliated_with_check_all_that_apply_other_text,
          international = to_comply_with_university_rules_and_regulations_please_indicate_if_you_are_an_international_student_please_note_that_this_does_not_prohibit_participation_in_this_program) |> 
   rename_with(~ gsub('please_rate_your_experience_in_the_following_technical_skills_note_1_not_experienced_and_5_extremely_experienced_', '', .x))
-  
+
+# For student profiles
+#write.csv(stu, "data/processed/rgk_students_spring_2022.csv", row.names = FALSE)  
 
 stu4 <- stu |> 
   select(
@@ -575,6 +577,22 @@ utility_score <- sum(match1$utility)
 print(paste0(stu1[1,1],"'s utility for ",org1[1,1], ": ", utility_score))
 ```
 
+# Prematches
+
+```{r prematches}
+
+stu4 <- stu4 |> 
+  filter(name != "Srujan Rode")
+
+org2 <- org2 |> 
+  filter(organization != "Austin Asian Impact")
+
+
+logic_modeling <- stu4 |> 
+  filter(logic_modeling > 3)
+
+```
+
 
 ```{r student_utility, message=FALSE, warning=FALSE, include=FALSE}
 
@@ -689,7 +707,7 @@ cell_color <- function(x) {
 
 
 uO_table <- as.data.frame(uO) |> 
-  mutate(across(1:15, cell_color))
+  mutate(across(1:14, cell_color))
 
 
 kbl(uO_table, escape = F) |> 

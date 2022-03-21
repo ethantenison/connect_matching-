@@ -331,6 +331,8 @@ stu <- read_csv("data/raw/CONNECT - Student Form (Spring 2022)_UTD.csv") |>
          international = to_comply_with_university_rules_and_regulations_please_indicate_if_you_are_an_international_student_please_note_that_this_does_not_prohibit_participation_in_this_program) |> 
   rename_with(~ gsub('please_rate_your_experience_in_the_following_skills_1_not_experienced_and_5_extremely_experienced_', '', .x))
   
+# For student profiles
+#write.csv(stu, "data/processed/utd_students_spring_2022.csv", row.names = FALSE)
 
 stu4 <- stu |> 
   select(
@@ -367,7 +369,11 @@ stu4 <- stu |>
          across(6:34,~gsub("5 - Extremely relevant", "5", .)),
          across(6:34, as.numeric),
          name = paste0(first_name," ", last_name),
-         across(6:34, ~replace_na(.x, 1)))
+         across(6:34, ~replace_na(.x, 1))) |> 
+  filter(name != "Ishdeep Kaur",
+         name != "Azharul Islam",
+         name != "Charles Bitzane",
+         name != "Anuolu Balogun")
 
 stumas <- stu4
 

@@ -1,0 +1,114 @@
+---
+mainfont: Arial
+title: CONNECT Student Profile
+subtitle: University of Texas at Dallas 
+output: pdf_document 
+theme: theme.css
+header-includes:
+- \usepackage[fontsize=12pt]{scrextend}
+- \usepackage{helvet}
+- \renewcommand{\familydefault}{\sfdefault}
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+```{r libraries and raw, message=FALSE, warning=FALSE, include=FALSE}
+
+df <- stu2 %>% filter(name == v)
+
+```
+# **Your Fellow** 
+\bigskip
+
+**NAME: **`r df$name[1]` \bigskip
+
+**PRONOUNS: **`r df$pronouns` \bigskip
+
+**SCHOOL: **`r df$schools[1]` \bigskip
+
+**EMAIL: ** `r df$email[1]` \bigskip
+
+**PHONE \#: ** `r df$phone` \bigskip
+
+**LINKEDIN URL: ** [`r df$linked_in_preferred_but_not_required`](`r df$linked_in_preferred_but_not_required`) \bigskip
+
+**DESIRED TARGET POPULATION: ** `r df$target_population` \bigskip
+
+
+------------------------------------------------------------------------
+
+# **AVAILABILITY**
+\bigskip
+
+`r df$do_you_have_access_to_transportation`
+\smallskip
+
+`r df$do_you_need_flexible_work_hours`
+\smallskip
+
+`r df$do_you_need_the_ability_to_work_remotely`\bigskip
+
+**SPECIAL AVAILABILITY :** `r df$is_there_any_additional_information_about_your_availability_that_we_should_know`
+
+------------------------------------------------------------------------
+
+
+# **SKILLS**
+
+```{r skill, echo = FALSE, fig.height=4, fig.width=6}
+skill <- df |> 
+  pivot_longer(30:55, names_to = "Skill", values_to = "Value") |> 
+  filter(Value > 1) |> 
+  mutate(
+   Skill = gsub(pattern = "_",
+         replacement = " ",
+         Skill),
+    Skill = str_to_title(Skill)) |> 
+  arrange(Value)
+
+
+theme_set(theme_classic())
+
+g <- ggplot(skill, aes(x = reorder(Skill, Value), y = Value, fill = Value)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Value, y = Value),
+            position = position_stack(vjust = 0.5),
+            size = 5) +
+  coord_flip() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.line = element_blank(),
+    text = element_text(size = 14,
+                        face = "bold"),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks = element_blank(),
+    axis.text.x = element_blank(),
+    plot.title = element_text(hjust=0),
+    plot.margin = margin(10, 10, 10, 10),
+    legend.title = element_blank(),
+    legend.position = "none",
+    plot.caption = element_text(hjust =0)
+    
+  ) +
+  scale_fill_gradient(low = "#bfe2dd", high = "#2a9d8f", na.value = NA)
+
+
+g
+
+```
+
+**OTHER RELEVANT SKILLS: ** 
+`r df$relevant_skills`
+
+\bigskip
+```{r logo, echo=FALSE, out.width="300px", fig.align='center'}
+knitr::include_graphics("C:/Users/tenis/Desktop/Data_Projects/connect_matching/rmarkdown/images/ut-dallas.png")
+
+```
+

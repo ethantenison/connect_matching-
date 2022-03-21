@@ -1,0 +1,143 @@
+---
+mainfont: Arial
+title: CONNECT Project Summary
+subtitle: University of Houston 
+output: pdf_document 
+theme: theme.css
+header-includes:
+- \usepackage[fontsize=12pt]{scrextend}
+- \usepackage[english]{babel}
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+```{r libraries and raw, message=FALSE, warning=FALSE, include=FALSE}
+
+df <- org %>% filter(project_name == v)
+
+```
+
+# Organization Details
+\bigskip
+
+
+**MATCHED ORGANIZATION: **`r df$organization[1]` 
+\bigskip
+
+
+**MISSION: ** `r df$organization_mission[1]`
+\bigskip
+
+
+**ORGANIZATION WEBSITE: ** [`r df$organization_website`](`r df$organization_website`){style="color: blue"}
+\bigskip
+
+
+**ADDRESS: ** `r df$organization_address[1]`
+\bigskip
+
+------------------------------------------------------------------------
+
+# Project Logistics
+\bigskip
+
+**TIME COMMITTMENT: **`r df$time_commitment` 
+\bigskip
+
+
+**DURATION: ** `r df$project_duration_selected_choice`
+\bigskip
+
+
+**WORK ENVIRONMENT FACTORS: ** `r df$work_environment` 
+\bigskip
+
+
+**SPECIFIC WORK REQUIREMENTS: ** `r df$what_other_relevant_skills_would_be_helpful_for_your_candidate_to_have_i_e_other_languages_spoken_coding_analytical_software_professional_skills_etc_list_them_here`
+\bigskip
+
+------------------------------------------------------------------------
+
+# Project Specifics
+\bigskip
+
+
+**GOAL: ** `r df$project_goal` 
+\bigskip
+
+
+**ESTIMATED FELLOWSHIP: ** `r df$project_fellowship_amount_selected_choice` 
+\bigskip
+
+
+**DELIVERABLE(S): ** 
+\bigskip
+
+`r df$project_deliverables`  
+\bigskip
+
+**IMPORTANT SKILLS: **
+\bigskip
+
+
+```{r skill, echo = FALSE, fig.height=2, fig.width=5}
+skill <- df |> 
+  pivot_longer(23:47, names_to = "Skill", values_to = "Value") |> 
+  filter(Value > 1) |> 
+  mutate(
+   Skill = gsub(pattern = "_",
+         replacement = " ",
+         Skill),
+    Skill = str_to_title(Skill)) |> 
+  arrange(Value)
+
+
+theme_set(theme_classic())
+
+g <- ggplot(skill, aes(x = reorder(Skill, Value), y = Value, fill = Value)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Value, y = Value),
+            position = position_stack(vjust = 0.5),
+            size = 5) +
+  coord_flip() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.line = element_blank(),
+    text = element_text(size = 14,
+                        face = "bold"),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks = element_blank(),
+    axis.text.x = element_blank(),
+    plot.title = element_text(hjust=0),
+    plot.margin = margin(10, 10, 10, 10),
+    legend.title = element_blank(),
+    legend.position = "none",
+    plot.caption = element_text(hjust =0)
+    
+  ) +
+  scale_fill_gradient(low = "#bfe2dd", high = "#2a9d8f", na.value = NA)
+
+
+g
+
+```
+
+ 
+\bigskip
+\bigskip
+
+
+
+
+
+```{r logo, echo=FALSE, out.width="300px", fig.align='center'}
+knitr::include_graphics("C:/Users/tenis/Desktop/Data_Projects/connect_matching/rmarkdown/images/hobby_logo.png")
+
+```
+
