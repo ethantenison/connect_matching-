@@ -1,0 +1,107 @@
+---
+title: "CONNECT Program Matching"
+description: |
+  Resume analysis to be included in the matching process 
+author:
+  - name: Ethan Tenison 
+    affiliation: RGK Center for Philanthropy and Community Service 
+    affiliation_url: https://rgkcenter.org/
+date: "`r format(Sys.Date(), '%B %d, %Y') `"
+output:
+  distill::distill_article:
+    code_folding: yes
+    toc: yes
+    toc_float: yes
+    theme: theme.css
+  pdf_document: default
+  word_document:
+    toc: yes
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+
+library(tidyverse)
+library(tidytext)
+library(pdftools)
+library(stringr)
+
+```
+
+First we need to convert the pdfs to text 
+
+```{r convert_pdf}
+
+pdf_path <- "data/raw/resumes_bucket1/Abigail Grider-Reiff.pdf"
+# extract text
+resume <- pdftools::pdf_text(pdf_path) %>%
+  paste(sep = " ") %>%
+  stringr::str_replace_all(fixed("\n"), " ") %>%
+  stringr::str_replace_all(fixed("\r"), " ") %>%
+  stringr::str_replace_all(fixed("\t"), " ") %>%
+  stringr::str_replace_all(fixed("\""), " ") %>%
+  paste(sep = " ", collapse = " ") %>%
+  stringr::str_squish() %>%
+  stringr::str_replace_all("- ", "") 
+
+print(resume)
+
+```
+
+Now let's convert all of the pdf resumes in bucket 1 to text
+
+```{r bucket_1_convert}
+
+convertpdf2txt <- function(dirpath){
+  files <- list.files(dirpath, full.names = T)
+  x <- sapply(files, function(x){
+  x <- pdftools::pdf_text(x) %>%
+  paste(sep = " ") %>%
+  stringr::str_replace_all(fixed("\n"), " ") %>%
+  stringr::str_replace_all(fixed("\r"), " ") %>%
+  stringr::str_replace_all(fixed("\t"), " ") %>%
+  stringr::str_replace_all(fixed("\""), " ") %>%
+  stringr::str_replace_all("[^[:alnum:]]", " ") %>%
+  paste(sep = " ", collapse = " ") %>%
+  stringr::str_squish() %>%
+  stringr::str_replace_all("- ", "") 
+  return(x)
+    })
+}
+
+
+
+b1_raw <- convertpdf2txt("data/raw/resumes_bucket1/")
+
+b1 <- as.data.frame(b1_raw) |> 
+  mutate(bucket = "Bucket 1")
+
+print(b1)
+
+```
+
+
+```{r allbuckets, warning=FALSE, message=FALSE}
+
+b2_raw <- convertpdf2txt("data/raw/test/")
+
+b2 <- as.data.frame(b2_raw) |> 
+  mutate(bucket = "Bucket 2")
+
+b3_raw <- convertpdf2txt("data/raw/resumes_bucket3/")
+
+b3 <- as.data.frame(b3_raw) |> 
+  mutate(bucket = "Bucket 3")
+
+b4_raw <- convertpdf2txt("data/raw/resumes_bucket4/")
+
+b4 <- as.data.frame(b4_raw) |> 
+  mutate(bucket = "Bucket 4")
+
+```
+
+
+Joining all datasets
+
