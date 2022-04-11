@@ -24,24 +24,34 @@ knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 
 library(tidyverse)
+library(tidymodels)
 library(tidytext)
 library(pdftools)
 library(stringr)
+library(textrecipes)
+library(discrim)
+library(yaml)
 
 ```
+
+
+# Methodology
+
+After 3 years of the CONNECT program we have a lot of resumes and data. Combining the project bucket data with the resumes, I created a labeled data set. Since the first and second buckets are less technical, and the third and fourth are more so, I was able to combine them further into a binary variable, or technical classification. Then I used natural language processing and a random forest model to predict which students resumes were technical or not. The first run through had an accuracy rating of over 80%, after using cross validation. Upon closer inspection, many of those that were mislabeled were actually students who were super technical matched with a less technical project, or vice versa. There are many reason why this might have happened. Maybe the student was super technical but shared an interest with the organization, or maybe a project wound up in bucket 2 even if it only needed excel. Since the main goal of this is to assign a technical rating, it doesn't really matter if some of the student resumes were relabeled. There were a handful in each category where the algorithm clearly failed. PhD students who submitted large CV's, for example, were often mislabeled, and those were kept in there. Over all, with the changes to the labels, the algorithm performed much better. 
 
 First we need to convert the pdfs to text 
 
 ```{r convert_pdf}
 
 pdf_path <- "data/raw/resumes_bucket1/Abigail Grider-Reiff.pdf"
+
 # extract text
 resume <- pdftools::pdf_text(pdf_path) %>%
   paste(sep = " ") %>%
-  stringr::str_replace_all(fixed("\n"), " ") %>%
-  stringr::str_replace_all(fixed("\r"), " ") %>%
-  stringr::str_replace_all(fixed("\t"), " ") %>%
-  stringr::str_replace_all(fixed("\""), " ") %>%
+  stringr::str_replace_all(stringr::fixed("\n"), " ") %>%
+  stringr::str_replace_all(stringr::fixed("\r"), " ") %>%
+  stringr::str_replace_all(stringr::fixed("\t"), " ") %>%
+  stringr::str_replace_all(stringr::fixed("\""), " ") %>%
   paste(sep = " ", collapse = " ") %>%
   stringr::str_squish() %>%
   stringr::str_replace_all("- ", "") 
@@ -59,11 +69,12 @@ convertpdf2txt <- function(dirpath){
   x <- sapply(files, function(x){
   x <- pdftools::pdf_text(x) %>%
   paste(sep = " ") %>%
-  stringr::str_replace_all(fixed("\n"), " ") %>%
-  stringr::str_replace_all(fixed("\r"), " ") %>%
-  stringr::str_replace_all(fixed("\t"), " ") %>%
-  stringr::str_replace_all(fixed("\""), " ") %>%
-  stringr::str_replace_all("[^[:alnum:]]", " ") %>%
+  stringr::str_replace_all(stringr::fixed("\n"), " ") %>%
+  stringr::str_replace_all(stringr::fixed("\r"), " ") %>%
+  stringr::str_replace_all(stringr::fixed("\t"), " ") %>%
+  stringr::str_replace_all(stringr::fixed("\""), " ") %>%
+  stringr::str_replace_all("[^[:alnum:]]", " ") %>% #this line removes 
+    #everything that's no alphanumerica
   paste(sep = " ", collapse = " ") %>%
   stringr::str_squish() %>%
   stringr::str_replace_all("- ", "") 
@@ -76,7 +87,8 @@ convertpdf2txt <- function(dirpath){
 b1_raw <- convertpdf2txt("data/raw/resumes_bucket1/")
 
 b1 <- as.data.frame(b1_raw) |> 
-  mutate(bucket = "Bucket 1")
+  mutate(bucket = "Bucket 1") |> 
+  rename(resume = b1_raw)
 
 print(b1)
 
@@ -88,20 +100,141 @@ print(b1)
 b2_raw <- convertpdf2txt("data/raw/test/")
 
 b2 <- as.data.frame(b2_raw) |> 
-  mutate(bucket = "Bucket 2")
+  mutate(bucket = "Bucket 2")  |> 
+  rename(resume = b2_raw)
 
 b3_raw <- convertpdf2txt("data/raw/resumes_bucket3/")
 
 b3 <- as.data.frame(b3_raw) |> 
-  mutate(bucket = "Bucket 3")
+  mutate(bucket = "Bucket 3") |> 
+  rename(resume = b3_raw)
 
 b4_raw <- convertpdf2txt("data/raw/resumes_bucket4/")
 
 b4 <- as.data.frame(b4_raw) |> 
-  mutate(bucket = "Bucket 4")
+  mutate(bucket = "Bucket 4")  |> 
+  rename(resume = b4_raw)
+
+```
+
+# Joining all datasets
+
+```{r join}
+
+res <- b1 |> 
+  bind_rows(b2, b3, b4) |> 
+  mutate(con_bucket = case_when(
+    bucket == "Bucket 1" ~ "Less Technical",
+    bucket == "Bucket 2" ~ "Less Technical",
+    bucket == "Bucket 3" ~ "More Technical",
+    bucket == "Bucket 4" ~ "More Technical",
+    TRUE ~ "Other"
+  ),
+  bucket = factor(bucket),
+  con_bucket = factor(con_bucket)) 
+```
+
+# Splitting data 
+
+```{r splitting}
+
+set.seed(27)
+
+res_split <- initial_split(data = res, strata = con_bucket, prop = .8)
+res_split
+
+res_train <- training(res_split)
+res_test <- testing(res_split)
+
+res_train
+
+```
+
+# Preprocessing
+
+```{r prepro}
+
+bucket_rec <- recipe(con_bucket ~ resume, data = res_train)
+
+bucket_rec <- bucket_rec %>%
+  step_tokenize(resume) %>%
+  step_stopwords(resume) %>%
+  step_tokenfilter(resume, max_tokens = 500) %>%
+  step_tfidf(resume)
+
+```
+
+# Model training 
+
+```{r}
+ra_spec <- rand_forest() %>%
+  set_mode("classification") %>%
+  set_engine("randomForest")
+
+print(ra_spec)
+
+
+ra_wf <- workflow() %>%
+  add_recipe(bucket_rec) %>%
+  add_model(ra_spec)
+
+print(ra_wf)
+
+ra_wf %>%
+  fit(data = res_train)
+```
+
+# Evaluation 
+
+
+```{r eval}
+
+set.seed(27)
+
+res_folds <- vfold_cv(data = res_train, strata = con_bucket, v = 3)
+res_folds
+
+ra_cv <- ra_wf %>%
+  fit_resamples(
+    res_folds,
+    control = control_resamples(save_pred = TRUE),
+    metrics = metric_set(recall, precision, accuracy, roc_auc)
+  )
+
+```
+
+```{r test}
+
+ra_cv_metrics <- collect_metrics(ra_cv)
+ra_cv_predictions <- collect_predictions(ra_cv)
+
+ra_cv_metrics
+```
+
+```{r test_Data}
+
+ra_fit <- ra_wf %>%
+  fit(data = res_train)
+
+res_pred_test <- predict(ra_fit, new_data = res_test)
+
+results <- res_test |> 
+  bind_cols(res_pred_test)
+
 
 ```
 
 
-Joining all datasets
+
+# NOTE!
+
+Some of the resumes were moved to different buckets in the end. The reason for this is because some of them were clearly not technical or clearly not technical, leading to lower model performance. 
+
+
+```{r saving}
+
+saveRDS(ra_fit, "models/resume_model.rds" )
+
+```
+
 
