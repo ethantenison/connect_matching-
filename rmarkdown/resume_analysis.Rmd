@@ -139,13 +139,10 @@ res <- b1 |>
 ```{r splitting}
 
 set.seed(27)
-
 res_split <- initial_split(data = res, strata = con_bucket, prop = .8)
 res_split
-
 res_train <- training(res_split)
 res_test <- testing(res_split)
-
 res_train
 
 ```

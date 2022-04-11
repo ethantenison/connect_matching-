@@ -29,6 +29,12 @@ library(labelled)   #Also dealing with labels
 library(plotly)     #For interactive ploting
 library(htmltools)  #for html widgets 
 library(matchingR)  #for gale shapley 
+library(tidymodels) #for ml
+library(tidytext)   #for nlp
+library(pdftools)   #converting pdfs
+library(textrecipes) #nlp processing
+library(discrim)   
+library(yaml)      #saving models
 
 
 knitr::opts_chunk$set(echo = TRUE)
@@ -178,7 +184,6 @@ org_mapping <- org2 |>
         organization_address,
         organization_website
         )
-  
 org3 <- org2 |>
   select(
     organization,
@@ -533,7 +538,8 @@ stu_table2 <- stumas |>
   rename(additional_information = is_there_any_additional_information_regarding_your_availability_that_we_should_know_about) |> 
   mutate(relevant_skills = replace_na(relevant_skills, ""),
          target_population = replace_na(target_population, ""),
-         additional_information = replace_na(additional_information, ""))
+         additional_information = replace_na(additional_information, "")) |> 
+  left_join(race2, by = "name")
 
 names(stu_table2) <- gsub(pattern = "_",
                   replacement = " ",
@@ -556,7 +562,8 @@ The following chart was constructed by counting every student who put at least a
 
 
 stu2 <- stu |>
-  select(first_name, 30:54)
+  select(first_name, 66:90) |> 
+  rename(spanish = "please_rate_your_proficiency_with_the_following_language_note_1_no_proficiency_and_5_extremely_proficient_native_speaker_spanish")
 
 names(stu2) <- gsub(pattern = "_",
                    replacement = " ",
@@ -598,7 +605,7 @@ g <- ggplot(stu3, aes(x = reorder(Skill, n), y = n, fill = n)) +
     legend.position = "none"
     
   ) +
-  labs(title = "CONNECT Spring 2022 Student Skills",
+  labs(title = "Student Skills",
        caption = "**Calculated by summing skills rated as higher than 1") +
    scale_fill_distiller(palette = "RdYlGn", direction = 1) 
 
@@ -606,6 +613,135 @@ g <- ggplot(stu3, aes(x = reorder(Skill, n), y = n, fill = n)) +
 g
 
 ```
+
+# Resumes Model Training 
+
+
+### Methodology
+
+After 3 years of the CONNECT program we have a lot of resumes and data. Combining the project bucket data with the resumes, I created a labeled data set. Since the first and second buckets are less technical, and the third and fourth are more so, I was able to combine them further into a binary variable, or technical classification. Then I used natural language processing and a random forest model to predict which students resumes were technical or not. The first run through had an accuracy rating of over 80%, after using cross validation. Upon closer inspection, many of those that were mislabeled were actually students who were super technical matched with a less technical project, or vice versa. There are many reason why this might have happened. Maybe the student was super technical but shared an interest with the organization, or maybe a project wound up in bucket 2 even if it only needed excel. Since the main goal of this is to assign a technical rating, it doesn't really matter if some of the student resumes were relabeled. There were a handful in each category where the algorithm clearly failed. PhD students who submitted large CV's, for example, were often mislabeled, and those were kept in there. Over all, with the changes to the labels, the algorithm performed much better. 
+
+** NOTE! Some of the resumes were moved to different buckets in the end. The reason for this is because some of them were clearly not technical or clearly not technical, leading to lower model performance. 
+
+### Model Prep
+
+First we need to convert the pdfs to text. Then we preprocess the text data so that it doesn't contain punctuation or words that don't have any meaning, like the word "the" or "at". Finally, we split the data into test and train datasets 
+
+```{r model_prep, message=FALSE, warning=FALSE}
+
+# converting resumes to text data 
+
+convertpdf2txt <- function(dirpath){
+  files <- list.files(dirpath, full.names = T)
+  x <- sapply(files, function(x){
+  x <- pdftools::pdf_text(x) %>%
+  paste(sep = " ") %>%
+  stringr::str_replace_all(stringr::fixed("\n"), " ") %>%
+  stringr::str_replace_all(stringr::fixed("\r"), " ") %>%
+  stringr::str_replace_all(stringr::fixed("\t"), " ") %>%
+  stringr::str_replace_all(stringr::fixed("\""), " ") %>%
+  stringr::str_replace_all("[^[:alnum:]]", " ") %>% #this line removes 
+    #everything that's no alphanumerica
+  paste(sep = " ", collapse = " ") %>%
+  stringr::str_squish() %>%
+  stringr::str_replace_all("- ", "") 
+  return(x)
+    })
+}
+
+
+b1_raw <- convertpdf2txt("data/raw/resumes_bucket1/")
+b1 <- as.data.frame(b1_raw) |> 
+  mutate(bucket = "Bucket 1") |> 
+  rename(resume = b1_raw)
+
+b2_raw <- convertpdf2txt("data/raw/test/")
+b2 <- as.data.frame(b2_raw) |> 
+  mutate(bucket = "Bucket 2")  |> 
+  rename(resume = b2_raw)
+
+b3_raw <- convertpdf2txt("data/raw/resumes_bucket3/")
+b3 <- as.data.frame(b3_raw) |> 
+  mutate(bucket = "Bucket 3") |> 
+  rename(resume = b3_raw)
+b4_raw <- convertpdf2txt("data/raw/resumes_bucket4/")
+b4 <- as.data.frame(b4_raw) |> 
+  mutate(bucket = "Bucket 4")  |> 
+  rename(resume = b4_raw)
+
+res <- b1 |> 
+  bind_rows(b2, b3, b4) |> 
+  mutate(con_bucket = case_when(
+    bucket == "Bucket 1" ~ "Less Technical",
+    bucket == "Bucket 2" ~ "Less Technical",
+    bucket == "Bucket 3" ~ "More Technical",
+    bucket == "Bucket 4" ~ "More Technical",
+    TRUE ~ "Other"
+  ),
+  bucket = factor(bucket),
+  con_bucket = factor(con_bucket)) 
+
+
+set.seed(27)
+res_split <- initial_split(data = res, strata = con_bucket, prop = .8)
+res_train <- training(res_split)
+res_test <- testing(res_split)
+
+```
+
+
+### ML
+
+Random forest was used to classify the resumes. 
+
+```{r ml, message=FALSE, warning=FALSE}
+bucket_rec <- recipe(con_bucket ~ resume, data = res_train)
+bucket_rec <- bucket_rec %>%
+  step_tokenize(resume) %>%
+  step_stopwords(resume) %>%
+  step_tokenfilter(resume, max_tokens = 500) %>%
+  step_tfidf(resume)
+
+ra_spec <- rand_forest() %>%
+  set_mode("classification") %>%
+  set_engine("randomForest")
+
+
+ra_wf <- workflow() %>%
+  add_recipe(bucket_rec) %>%
+  add_model(ra_spec)
+
+ra_wf %>%
+  fit(data = res_train)
+
+
+
+```
+
+
+### Evaluating
+
+The model has an accuracy of around 95%. NOTE this is after I moved some resumes because they were not technical. The model is best at evaluating whether a student's resume is technical or not. 
+
+```{r eval}
+
+res_folds <- vfold_cv(data = res_train, strata = con_bucket, v = 3)
+
+ra_cv <- ra_wf %>%
+  fit_resamples(
+    res_folds,
+    control = control_resamples(save_pred = TRUE),
+    metrics = metric_set(recall, precision, accuracy, roc_auc)
+  )
+
+ra_cv_metrics <- collect_metrics(ra_cv)
+ra_cv_predictions <- collect_predictions(ra_cv)
+
+ra_cv_metrics
+
+
+```
+
 
 # Matching 
 
@@ -621,10 +757,14 @@ Additionally, if a student put a 1 on a skill, which means they have no backgrou
 
 Finally, all of the skill utility ratings are added up to produce one utility rating for `r stu4[1,1]` and `r org2[1,1]`. The higher the number, the greater the utility the student will have for that project. 
 
+
+** Note! The skills must be named the same thing otherwise it will not work 
+
 ```{r testing_utility, echo=TRUE, message=FALSE, warning=FALSE}
 
+
 #Initial Data Manipulation
-org1 <- org2[1, ] |>
+org1 <- org3[1, ] |>
   pivot_longer(9:34, names_to = "variable", values_to = "org_value")
 stu1 <- stu4[1, ] |>
   pivot_longer(6:31, names_to = "variable", values_to = "student_value")
@@ -664,19 +804,22 @@ utility_score <- sum(match1$utility)
 print(paste0(stu1[1,1],"'s utility for ",org1[1,1], ": ", utility_score))
 ```
 
-# Prematches
+### Prematches
 
 ```{r prematches}
 
 stu4 <- stu4 |> 
-  filter(name != "Srujan Rode")
+  filter(name != "Brie Winnega Reamer",
+         name != "Ziyue Xu",
+         name != "Francisco Castellanos-Sosa",
+         name != "Rania Sahail",
+         name != "Abigail Grider-Reidf")
 
-org2 <- org2 |> 
-  filter(organization != "Austin Asian Impact")
+org3 <- org3 |> 
+  filter(organization != "Texas Census 2030",
+         organization != "Austin Asian Impact",
+         organization != "Keep Austin Fed")
 
-
-logic_modeling <- stu4 |> 
-  filter(logic_modeling > 3)
 
 ```
 
@@ -685,15 +828,15 @@ logic_modeling <- stu4 |>
 
 #utility students                                    
 column_names <- stu4$name
-row_names <- org2$organization
+row_names <- org3$organization
 
-uS <- matrix(nrow = length(org2$project_name),
+uS <- matrix(nrow = length(org3$project_name),
              ncol = length(stu4$name),
              dimnames = list(row_names, column_names))
 
-for (i in 1:length(org2$project_name)) {
+for (i in 1:length(org3$project_name)) {
   for (j in 1:length(stu4$name)) {
-    org1 <- org2[i, ] |>
+    org1 <- org3[i, ] |>
       pivot_longer(9:34, names_to = "variable", values_to = "org_value")
     
     stu1 <- stu4[j, ] |>
@@ -741,16 +884,16 @@ For simplicity sake, only the organization utility scores are shown below becaus
 ```{r org_utility, message=FALSE, warning=FALSE, layout="l-body-outset"}
 #utility organizations  
 row_names <- stu4$name
-column_names <- org2$project_name
+column_names <- org3$project_name
 
 uO <- matrix(nrow = length(stu4$name),
-             ncol = length(org2$project_name),
+             ncol = length(org3$project_name),
              dimnames = list(row_names, column_names))
 
 
 for (j in 1:length(stu4$name)) {
-  for (i in 1:length(org2$project_name)) {
-    org1 <- org2[i,] |>
+  for (i in 1:length(org3$project_name)) {
+    org1 <- org3[i,] |>
       pivot_longer(9:34, names_to = "variable", values_to = "org_value")
     
     stu1 <- stu4[j,] |>
@@ -794,7 +937,7 @@ cell_color <- function(x) {
 
 
 uO_table <- as.data.frame(uO) |> 
-  mutate(across(1:14, cell_color))
+  mutate(across(1:17, cell_color))
 
 
 kbl(uO_table, escape = F) |> 
@@ -811,7 +954,6 @@ The `matchingR` package was used to quickly compute the Gale-Shapley algorithm. 
 
 #Matching Algorithm 
 matching = galeShapley.marriageMarket(uS, uO)
-
 
 ```
 
@@ -840,7 +982,7 @@ top_df$matrix.unlist.tops...nrow...length.tops...byrow...TRUE.<-
   gsub("\\."," ",top_df$matrix.unlist.tops...nrow...length.tops...byrow...TRUE.)
 
 #Creating a data frame for table 
-org_info <- org2 |> 
+org_info <- org3 |> 
   select(project_name)
 
 students_matched <- stu4 |> 
@@ -856,7 +998,6 @@ students_matched <- stu4 |>
 var_label(students_matched$Project) <- NULL
 
 
-  
 kbl(students_matched) |> 
   kable_material(c("hover","striped"), full_width = F) |> 
   scroll_box(width = "100%", height = "600px")
@@ -864,8 +1005,47 @@ kbl(students_matched) |>
 ```
 
 <br>
-<br>
-<br>
+
+
+# Matching with NLP
+
+
+```{r modifying data}
+
+#pulling the bucket information
+tech <- org2 |> 
+  select(organization, starts_with("identify_the_categories")) |> 
+   rename_with(~ gsub('identify_the_categories_your_project_falls_under_check_all_that_apply_', '', .x)) |>
+  pivot_longer(cols = 2:7, names_to = "bucket", values_to = "value") |> 
+  filter(!is.na(value),
+         value != "Data Collection & Tool Development" &
+         value != "Measurement Strategy",
+         value != "Research") |> 
+  select(organization, value)
+
+#joining org score with technical 
+org_nlp <- org3 |> 
+  left_join(tech, by = "organization") |> 
+  mutate(technical = case_when(
+    is.na(value) ~ "Less Technical",
+    TRUE ~ "More Technical"
+  )) |> 
+  select(-value)
+
+```
+
+
+# Reading in student resumes 
+
+Unfortunately the qualtrics api doesn't not read in uploaded files yet
+
+```{r resumes}
+
+```
+
+
+
+
 
 <img src="C:/Users/tenis/Desktop/Data_Projects/connect_matching/reports/RGB_formal_RGK.png" alt="RGK Center">
 
