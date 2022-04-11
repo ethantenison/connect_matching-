@@ -341,23 +341,33 @@ Because CONNECT uses a formalized survey structure, the data cleaning process fo
 
 ```{r org_clean, message=FALSE, warning=FALSE, layout="l-body-outset"}
 
-stu <- read_csv("data/raw/CONNECT_rgk_students_spring2022.csv") |> 
-  select(-c(1:17)) |> 
-  filter(!row_number() %in% c(2)) |> 
-  janitor::row_to_names(1) |> 
+stu <- stu_raw
+
+colnames(stu) <- label(stu)
+stu <- stu |> 
   clean_names() |> 
   rename(pronouns = preferred_pronouns_selected_choice,
          phone = phone_number_please_do_not_include_hyphens_or_parentheses,
-         relevant_skills = do_you_have_other_relevant_skills_that_may_be_helpful_for_us_to_know_about_i_e_other_languages_spoken_list_them_here_note_separate_each_skill_with_a_comma,
+         relevant_skills = do_you_have_other_relevant_skills_or_previous_experience_that_may_be_helpful_for_us_to_know_about_i_e_other_languages_spoken_courses_youvetaken_or_will_be_enrolled_in_this_summer_list_them_here_note_separate_each_skill_with_a_comma,
          target_population = every_semester_the_connect_program_works_with_organizations_that_serve_many_different_target_populations_are_there_any_specific_populations_that_youre_interested_in_working_with,
          nonprofit_experience = over_the_past_5_years_approximately_how_much_experience_have_you_had_working_or_directly_volunteering_with_nonprofit_organizations,
-         schools = which_ut_schools_colleges_are_you_affiliated_with_check_all_that_apply_selected_choice,
-         schools_other = which_ut_schools_colleges_are_you_affiliated_with_check_all_that_apply_other_text,
          international = to_comply_with_university_rules_and_regulations_please_indicate_if_you_are_an_international_student_please_note_that_this_does_not_prohibit_participation_in_this_program) |> 
-  rename_with(~ gsub('please_rate_your_experience_in_the_following_technical_skills_note_1_not_experienced_and_5_extremely_experienced_', '', .x))
+  rename_with(~ gsub('please_rate_your_experience_with_the_following_technical_skills_note_1_not_experienced_and_5_extremely_experienced_', '', .x)) |> 
+  rename_with(~ gsub('please_rate_your_experience_with_the_following_consulting_and_evaluation_skills_note_1_not_experienced_and_5_extremely_experienced_', '', .x)) |>
+  rename_with(~ gsub('which_of_the_following_best_describes_your_race_ethnicity_select_all_that_apply_selected_choice_', '', .x) ) 
 
+stu$alaska_native[is.na(stu$alaska_native)] <- ""
+stu$asian[is.na(stu$asian)] <- ""
+stu$black_or_african_american[is.na(stu$black_or_african_american)] <- ""
+stu$hispanic_or_latino[is.na(stu$hispanic_or_latino)] <- ""
+stu$native_hawaiian[is.na(stu$native_hawaiian)] <- ""
+stu$other_pacific_islander[is.na(stu$other_pacific_islander)] <- ""
+stu$white_or_caucasian[is.na(stu$white_or_caucasian)] <- ""
+stu$i_prefer_to_specify[is.na(stu$i_prefer_to_specify)] <- ""
+              
 # For student profiles
 #write.csv(stu, "data/processed/rgk_students_spring_2022.csv", row.names = FALSE)  
+
 
 stu4 <- stu |> 
   select(
@@ -368,19 +378,20 @@ stu4 <- stu |>
     do_you_need_flexible_work_hours,
     do_you_need_the_ability_to_work_remotely,
     realistically_how_much_time_can_you_commit_per_week_to_working_on_a_project,
-    29:56
+    65:92
   ) |>
     rename(
       time_commitment = realistically_how_much_time_can_you_commit_per_week_to_working_on_a_project,
       transportation = do_you_have_access_to_transportation,
       flexible_hours = do_you_need_flexible_work_hours, 
-      remote = do_you_need_the_ability_to_work_remotely) |> 
+      remote = do_you_need_the_ability_to_work_remotely,
+      spanish = please_rate_your_proficiency_with_the_following_language_note_1_no_proficiency_and_5_extremely_proficient_native_speaker_spanish) |> 
   mutate(nonprofit_experience = case_when(
     nonprofit_experience == "No experience (yet!)" ~ "1",
     nonprofit_experience == "Less than 6 months" ~ "2",
     nonprofit_experience == "6 - 12 months" ~ "3",
     nonprofit_experience == "1 - 2 years" ~ "4",
-    nonprofit_experience == "2 or more years" ~ "5",
+    nonprofit_experience == "Over 2 years" ~ "5"
   ),
   time_commitment = case_when(
     time_commitment == "Less than 5 hours per week" ~ "1",
@@ -392,6 +403,7 @@ stu4 <- stu |>
   )) |> 
   mutate(across(7:33, as.numeric),
          name = paste0(first_name," ", last_name))
+
 
 stumas <- stu4
 
@@ -438,10 +450,7 @@ We do not collect student addresses, but `Qualtrics` does record the longitude a
 
 ```{r student_location}
 
-stu_geo <- read_csv("data/raw/CONNECT_rgk_students_spring2022.csv") |> 
-  filter(!row_number() %in% c(2)) |> 
-  janitor::row_to_names(1) |> 
-  clean_names() |> 
+stu_geo <- stu |> 
   select(first_name, last_name, location_latitude, location_longitude ) |> 
   mutate(name = paste0(first_name, " ",last_name),
          location_latitude = as.numeric(location_latitude),
