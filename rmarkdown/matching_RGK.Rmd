@@ -44,12 +44,13 @@ Using the `qualtRics` package the organization and student surveys were pulled d
 
 ```{r qualtrics, message=FALSE, warning=FALSE, echo=TRUE, results='hide'}
 
-# Connecting to the Qualtrics API
-qualtrics_api_credentials(
-api_key = Sys.getenv("qualtrics_key"), 
-base_url = "ca1.qualtrics.com", 
-install = FALSE
-)
+# # Connecting to the Qualtrics API
+# qualtrics_api_credentials(
+# api_key = "", 
+# base_url = "ca1.qualtrics.com", 
+# install = TRUE,
+# overwrite = TRUE
+# )
 
 #Pulling the organization and students surveys 
 surveys <- all_surveys() 
@@ -200,7 +201,7 @@ g <- ggplot(buckets, aes(x = reorder(bucket, n), y = n)) +
      legend.position = "none",
      
    ) +
-  labs(title = "CONNECT Fall 2021 Project buckets", y = "Number", fill = "Buckets") 
+  labs(title = "Project buckets", y = "Number", fill = "Buckets") 
 
 
 g

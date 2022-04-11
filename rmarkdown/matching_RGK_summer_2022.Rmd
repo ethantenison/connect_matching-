@@ -47,10 +47,10 @@ Using the `qualtRics` package the organization and student surveys were pulled d
 # Connecting to the Qualtrics API
 # There's always problem with the api. Make sure they haven't changed your key.....
 # set your api key using Sys.setenv("NAME" = "API KEY")
-qualtrics_api_credentials(
-api_key = Sys.getenv("qualtrics_key"), 
-base_url = "ca1.qualtrics.com"
-)
+# qualtrics_api_credentials(
+# api_key = Sys.getenv("qualtrics_key"), 
+# base_url = "ca1.qualtrics.com"
+# )
 
 #Pulling the organization and students surveys 
 surveys <- all_surveys() 
@@ -296,7 +296,7 @@ g <- ggplot(buckets, aes(x = reorder(value, n), y = n)) +
   labs(title = "Project buckets",
        y = "Number",
        fill = "Buckets",
-       caption = "**Several projects had two or three categories") 
+       caption = "**Several projects had two+ categories") 
 
 
 g
@@ -356,14 +356,67 @@ stu <- stu |>
   rename_with(~ gsub('please_rate_your_experience_with_the_following_consulting_and_evaluation_skills_note_1_not_experienced_and_5_extremely_experienced_', '', .x)) |>
   rename_with(~ gsub('which_of_the_following_best_describes_your_race_ethnicity_select_all_that_apply_selected_choice_', '', .x) ) 
 
-stu$alaska_native[is.na(stu$alaska_native)] <- ""
-stu$asian[is.na(stu$asian)] <- ""
-stu$black_or_african_american[is.na(stu$black_or_african_american)] <- ""
-stu$hispanic_or_latino[is.na(stu$hispanic_or_latino)] <- ""
-stu$native_hawaiian[is.na(stu$native_hawaiian)] <- ""
-stu$other_pacific_islander[is.na(stu$other_pacific_islander)] <- ""
-stu$white_or_caucasian[is.na(stu$white_or_caucasian)] <- ""
-stu$i_prefer_to_specify[is.na(stu$i_prefer_to_specify)] <- ""
+
+race <- stu |> 
+  select(first_name, last_name, 93:103) |> 
+  mutate(name = paste0(first_name," ", last_name)) |> 
+  select(name, everything(),-c(first_name, last_name, i_prefer_to_specify)) |> 
+  pivot_longer(cols=2:11, names_to = "ra_e", values_to = "race_ethnicity") |> 
+  filter(!is.na(race_ethnicity)) |> 
+  select(-ra_e)
+
+race_plot <- race |> 
+  group_by(race_ethnicity) |> 
+  count() |> 
+  arrange(n)
+
+
+r <- ggplot(race_plot, aes(x = reorder(race_ethnicity, n), y = n)) +
+  geom_bar(stat = "identity", fill = "#2A9D8F") +
+    geom_text(aes(label = n, y = n),
+    position = position_stack(vjust = 0.5),
+    size = 8) +
+  coord_flip()+
+   theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.line = element_blank(),
+     text = element_text(
+                         size = 16,
+                         face = "bold"),
+     axis.title.x = element_blank(),
+     axis.title.y = element_blank(),
+     axis.ticks = element_blank(),
+     plot.title = element_text(hjust = 0.5),
+     plot.margin = margin(10, 10, 10, 10),
+     legend.title = element_blank(),
+     legend.position = "none",
+     
+   ) +
+  labs(title = "Student Race/Ethnicity",
+       y = "Number",
+       caption = "**Several students had multiple identities") 
+
+
+r
+
+
+```
+
+
+```{r more_cleaning}
+  
+#add together ethnicity for those that selected multiple
+race$race_ethnicity[race$name == "Enrique Leon"] <- "Hispanic or Latino, Mestizo"
+race$race_ethnicity[race$name == "Francisco Castellanos-Sosa"] <- "Hispanic or Latino, White or Caucasian"
+race$race_ethnicity[race$name == "James Eckstrom"] <- "Hispanic or Latino, White or Caucasian"
+race$race_ethnicity[race$name == "Madison Laboy"] <- "Hispanic or Latino, White or Caucasian"
+race$race_ethnicity[race$name == "Tamar Farchy"] <- "Asian, White or Caucasian"
+race$race_ethnicity[race$name == "Steven Guerin"] <- "Hispanic or Latino, White or Caucasian"
+race$race_ethnicity[race$name == "Anna Weinstein-Perez"] <- "Hispanic or Latino, White or Caucasian"
+
+race2 <- unique(race)
+#it looks like someone put nothing ! 
               
 # For student profiles
 #write.csv(stu, "data/processed/rgk_students_spring_2022.csv", row.names = FALSE)  
