@@ -78,6 +78,8 @@ stu_raw <- fetch_survey(surveyID = surveys$id[stu_number], force_request = TRUE)
 
 Project CONNECT continues to offer a diverse set of projects to students. The word cloud below shows the most common words located in the project deliverable section. What's clear about this cohort is that data is king, and we a wide variety of projects and deliverables. 
 
+*Make sure to name organization with multiple projects different things 
+
 ```{r project_deliverables, fig.width=8, message=FALSE, warning=FALSE}
 library(wordcloud)
 library(RColorBrewer)
@@ -88,7 +90,8 @@ library(htmlwidgets)
 org <- org_raw
 colnames(org) <- label(org)
 org <- org |>
-  clean_names() 
+  clean_names()
+
   
 
 # Create a vector containing only the text
@@ -740,6 +743,20 @@ ra_cv_predictions <- collect_predictions(ra_cv)
 ra_cv_metrics
 
 
+
+```
+Testing out algorithm using test dataset
+```{r testing}
+
+ra_fit <- ra_wf %>%
+  fit(data = res_train)
+
+res_pred_test <- predict(ra_fit, new_data = res_test)
+
+results <- res_test |> 
+  bind_cols(res_pred_test)
+
+results
 ```
 
 
@@ -1009,8 +1026,9 @@ kbl(students_matched) |>
 
 # Matching with NLP
 
+### Assigning Tech Rating
 
-```{r modifying data}
+```{r modifying_data}
 
 #pulling the bucket information
 tech <- org2 |> 
@@ -1032,18 +1050,142 @@ org_nlp <- org3 |>
   )) |> 
   select(-value)
 
+org_nlp <- org_nlp[-1,]
+
 ```
 
 
-# Reading in student resumes 
+### Reading in student resumes 
 
-Unfortunately the qualtrics api doesn't not read in uploaded files yet
+Unfortunately the qualtrics api doesn't not read in uploaded files yet. 
 
 ```{r resumes}
 
+# One student's resume did not convert. Avni. It doesn't look like we have any project
+#for him though 
+rs_raw <- convertpdf2txt("data/raw/2022_summer_resumes/")
+rs <- as.data.frame(rs_raw) |> 
+  rownames_to_column("id") |> 
+  rename(resume = "rs_raw") |> 
+  mutate(id = gsub("data/raw/2022_summer_resumes/", "", id),
+         id = gsub("~.*", "", id))
+
+
+```
+
+### Run Model 
+
+```{r run_model}
+
+res_pred_test <- predict(ra_fit, new_data = rs)
+
+rs_pred <- rs |> 
+  bind_cols(res_pred_test)
+
+
+```
+
+### Altering Utility Scores
+
+
+```{r}
+
+stu_id <- stu |> 
+  select(first_name, last_name, response_id) |> 
+  mutate(name = paste0(first_name," ", last_name)) |> 
+  left_join(rs_pred, by = c("response_id" = "id")) |> 
+  select(name, .pred_class) |> 
+  rename(technical_rating = .pred_class)
+
+
+org_rating <- org_nlp$technical
+
+uo_nlp <- as.data.frame(uO) |> 
+  rownames_to_column("name") |> 
+  left_join(stu_id, by = "name") |> 
+  select(-name)
+
+#Downweighting  mismatched resumes
+for(j in 1:nrow(uo_nlp)) {
+  for (i in 1:(ncol(uo_nlp) - 1)) {
+    if (org_rating[i] == "More Technical" & uo_nlp[j,18] == "Less Technical") {
+      std <- sd(uo_nlp[,i])
+      uo_nlp[j, i] <- uo_nlp[j,i]-std/2
+    }
+  }
+}
+
+#removing negatives
+for(j in 1:nrow(uo_nlp)) {
+  for (i in 1:(ncol(uo_nlp) - 1)) {
+    if (uo_nlp[j, i] < 0) {
+      uo_nlp[j, i] <- 0
+    } 
+  }
+}
+
+uo_names <- as.data.frame(uO) |> 
+  rownames_to_column("name") |> 
+  left_join(stu_id, by = "name") |> 
+  select(name)
+
+#returning matrix to prior form
+uo_nlp <- uo_nlp |> 
+  select(-c(technical_rating)) |> 
+  bind_cols(uo_names) |> 
+  column_to_rownames(var="name")
+  
+uo_nlp <- as.matrix.data.frame(uo_nlp)
+
+
 ```
 
 
+```{r nlp_match}
+
+#Matching Algorithm 
+matching = galeShapley.marriageMarket(uS, uo_nlp)
+
+#Creating a list of top scorers
+uO2 <- as.data.frame(uo_nlp)
+org_options <- tibble::rownames_to_column(uO2, "Student") 
+tops <- list()
+
+for (i in 2:ncol(org_options)) {
+  org_top <- org_options |> 
+    slice_max(org_options[,i], n = 3)
+  
+tops[[i]] <- paste(org_top$Student, collapse=", ") 
+}
+
+tops <- tops[-1]
+top_df <- data.frame(matrix(unlist(tops), nrow=length(tops), byrow=TRUE))
+
+top_df$matrix.unlist.tops...nrow...length.tops...byrow...TRUE.<-
+  gsub("\\."," ",top_df$matrix.unlist.tops...nrow...length.tops...byrow...TRUE.)
+
+#Creating a data frame for table 
+org_info <- org3 |> 
+  select(project_name)
+
+students_matched <- stu4 |> 
+  slice(matching$engagements) |> 
+  bind_cols(org_info) |>  
+  bind_cols(top_df) |> 
+  rename(Student = name, 
+         Project = project_name,
+         "Top Scores" = "matrix.unlist.tops...nrow...length.tops...byrow...TRUE.") |> 
+  select(Project, Student,"Top Scores")
+  
+
+var_label(students_matched$Project) <- NULL
+
+
+kbl(students_matched) |> 
+  kable_material(c("hover","striped"), full_width = F) |> 
+  scroll_box(width = "100%", height = "600px")
+
+```
 
 
 
