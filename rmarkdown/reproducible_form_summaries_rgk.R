@@ -91,7 +91,17 @@ stu <- stu |>
   clean_names() |>
   filter(progress == 100) |> 
   mutate(name = paste0(first_name," ", last_name)) |> 
-  select(-c(1:17))
+  select(name, everything(),-c(1:19)) |> 
+  rename(pronouns = preferred_pronouns_selected_choice,
+         spanish = please_rate_your_proficiency_with_the_following_language_note_1_no_proficiency_and_5_extremely_proficient_native_speaker_spanish,
+       phone = phone_number_please_do_not_include_hyphens_or_parentheses,
+       relevant_skills = do_you_have_other_relevant_skills_or_previous_experience_that_may_be_helpful_for_us_to_know_about_i_e_other_languages_spoken_courses_youvetaken_or_will_be_enrolled_in_this_summer_list_them_here_note_separate_each_skill_with_a_comma,
+       target_population = every_semester_the_connect_program_works_with_organizations_that_serve_many_different_target_populations_are_there_any_specific_populations_that_youre_interested_in_working_with,
+       nonprofit_experience = over_the_past_5_years_approximately_how_much_experience_have_you_had_working_or_directly_volunteering_with_nonprofit_organizations,
+       international = to_comply_with_university_rules_and_regulations_please_indicate_if_you_are_an_international_student_please_note_that_this_does_not_prohibit_participation_in_this_program) |> 
+  rename_with(~ gsub('please_rate_your_experience_with_the_following_technical_skills_note_1_not_experienced_and_5_extremely_experienced_', '', .x)) |> 
+  rename_with(~ gsub('please_rate_your_experience_with_the_following_consulting_and_evaluation_skills_note_1_not_experienced_and_5_extremely_experienced_', '', .x)) |>
+  rename_with(~ gsub('which_of_the_following_best_describes_your_race_ethnicity_select_all_that_apply_selected_choice_', '', .x) ) 
 
 #Fixing responses for profile 
 stu$linked_in_preferred_but_not_required[is.na(stu$linked_in_preferred_but_not_required)] <- "UNAVAILABLE"
@@ -122,13 +132,13 @@ stu <- stu |>
     please_select_each_of_the_following_that_applies_to_you_i_am_pursuing_a_masters_degree =
       case_when(
         please_select_each_of_the_following_that_applies_to_you_i_am_pursuing_a_masters_degree == "I am pursuing a Master's degree." ~ "MASTERS CANDIDATE",
-TRUE ~ ""
+        TRUE ~ ""
       ),
-please_select_each_of_the_following_that_applies_to_you_i_am_pursuing_a_doctoral_degree =
-  case_when(
-    please_select_each_of_the_following_that_applies_to_you_i_am_pursuing_a_doctoral_degree == "I am pursuing a doctoral degree." ~ "DOCTORAL CANDIDATE",
-    TRUE ~ ""
-  ),
+    please_select_each_of_the_following_that_applies_to_you_i_am_pursuing_a_doctoral_degree =
+      case_when(
+        please_select_each_of_the_following_that_applies_to_you_i_am_pursuing_a_doctoral_degree == "I am pursuing a doctoral degree." ~ "DOCTORAL CANDIDATE",
+        TRUE ~ ""
+      ),
   ) |> 
   mutate(degree = paste0(please_select_each_of_the_following_that_applies_to_you_i_am_pursuing_a_masters_degree,
                          please_select_each_of_the_following_that_applies_to_you_i_am_pursuing_a_doctoral_degree)) |> 
@@ -159,8 +169,10 @@ stu$every_semester_the_connect_program_works_with_organizations_that_serve_many_
 
 slices = unique(stu$name)[!is.na(unique(stu$name))]
 
+slices2 <- slices[1:3]
+
 for(v in slices){
   render("rmarkdown/student_summaries.Rmd",
-         output_file=paste0("C:/Users/tenis/Desktop/Data_Projects/connect_matching/reports/student_profiles_rgk/", v, ".pdf")
+         output_file=paste0("C:/Users/tenis/Desktop/Data_Projects/connect_matching/reports/student_profiles/rgk/summer_2022/", v, ".pdf")
   )
 }

@@ -1,14 +1,14 @@
 ---
-mainfont: Arial
-title: CONNECT Student Profile
-subtitle: University of Houston 
+title: "**CONNECT Student Profile**"
+subtitle: "University of Texas at Austin"
 output: pdf_document 
 theme: theme.css
 header-includes:
 - \usepackage[fontsize=12pt]{scrextend}
-- \usepackage{helvet}
-- \renewcommand{\familydefault}{\sfdefault}
-
+- \usepackage[english]{babel}
+- \usepackage[default]{sourcesanspro}
+- \usepackage[T1]{fontenc}
+mainfont: SourceSansPro
 ---
 
 ```{r setup, include=FALSE}
@@ -18,7 +18,7 @@ knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 
 ```{r libraries and raw, message=FALSE, warning=FALSE, include=FALSE}
 
-df <- stu2 %>% filter(name == v)
+df <- stu %>% filter(name == v)
 
 ```
 # **Your Fellow** 
@@ -30,7 +30,7 @@ df <- stu2 %>% filter(name == v)
 
 **DEGREE: **`r df$degree[1]` \bigskip
 
-**SCHOOL: **`r df$schools[1]` \bigskip
+**SCHOOL: **`r df$school[1]` \bigskip
 
 **EMAIL: ** `r df$email[1]` \bigskip
 
@@ -63,13 +63,15 @@ df <- stu2 %>% filter(name == v)
 
 ```{r skill, echo = FALSE, fig.height=4, fig.width=6}
 skill <- df |> 
-  pivot_longer(26:50, names_to = "Skill", values_to = "Value") |> 
+  #make sure to change the column numbers 
+  pivot_longer(35:59, names_to = "Skill", values_to = "Value") |> 
   filter(Value > 1) |> 
   mutate(
    Skill = gsub(pattern = "_",
          replacement = " ",
          Skill),
-    Skill = str_to_title(Skill)) |> 
+    Skill = str_to_title(Skill),
+   Value = as.numeric(Value)) |> 
   arrange(Value)
 
 
@@ -109,8 +111,7 @@ g
 `r df$relevant_skills`
 
 \bigskip
-```{r logo, echo=FALSE, out.width="300px", fig.align='center'}
-knitr::include_graphics("C:/Users/tenis/Desktop/Data_Projects/connect_matching/rmarkdown/images/hobby_logo.png")
+```{r logo, echo=FALSE,warning = FALSE, message=FALSE,out.width="300px", fig.align='center'}
+knitr::include_graphics("C:/Users/tenis/Desktop/Data_Projects/connect_matching/rmarkdown/images/RGB_formal_RGK.png")
 
 ```
-
