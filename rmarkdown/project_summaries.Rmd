@@ -1,12 +1,14 @@
 ---
-mainfont: Arial
-title: CONNECT Project Summary
-subtitle: University of Houston 
+title: "**CONNECT Project Summary**"
+subtitle: UT Austin, RGK Center for Philanthropy and Community Service 
 output: pdf_document 
 theme: theme.css
 header-includes:
 - \usepackage[fontsize=12pt]{scrextend}
 - \usepackage[english]{babel}
+- \usepackage[default]{sourcesanspro}
+- \usepackage[T1]{fontenc}
+mainfont: SourceSansPro
 
 ---
 
@@ -17,7 +19,7 @@ knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 
 ```{r libraries and raw, message=FALSE, warning=FALSE, include=FALSE}
 
-df <- org %>% filter(project_name == v)
+df <- org2 %>% filter(project_name == v)
 
 ```
 
@@ -25,7 +27,7 @@ df <- org %>% filter(project_name == v)
 \bigskip
 
 
-**MATCHED ORGANIZATION: **`r df$organization[1]` 
+**MATCHED ORGANIZATION: **`r df$project_name[1]` 
 \bigskip
 
 
@@ -86,7 +88,7 @@ df <- org %>% filter(project_name == v)
 
 ```{r skill, echo = FALSE, fig.height=2, fig.width=5}
 skill <- df |> 
-  pivot_longer(23:47, names_to = "Skill", values_to = "Value") |> 
+  pivot_longer(45:69, names_to = "Skill", values_to = "Value") |> 
   filter(Value > 1) |> 
   mutate(
    Skill = gsub(pattern = "_",
@@ -133,11 +135,8 @@ g
 \bigskip
 
 
-
-
-
 ```{r logo, echo=FALSE, out.width="300px", fig.align='center'}
-knitr::include_graphics("C:/Users/tenis/Desktop/Data_Projects/connect_matching/rmarkdown/images/hobby_logo.png")
+knitr::include_graphics("C:/Users/tenis/Desktop/Data_Projects/connect_matching/rmarkdown/images/RGB_formal_RGK.png")
 
 ```
 

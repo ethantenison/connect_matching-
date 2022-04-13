@@ -35,6 +35,8 @@ library(pdftools)   #converting pdfs
 library(textrecipes) #nlp processing
 library(discrim)   
 library(yaml)      #saving models
+library(tidygeocoder) #geocoding
+library(leaflet)   #for mapping
 
 
 knitr::opts_chunk$set(echo = TRUE)
@@ -56,7 +58,7 @@ Using the `qualtRics` package the organization and student surveys were pulled d
 # qualtrics_api_credentials(
 # api_key = Sys.getenv("qualtrics_key"), 
 # base_url = "ca1.qualtrics.com"
-# )
+ #)
 
 #Pulling the organization and students surveys 
 surveys <- all_surveys() 
@@ -313,9 +315,8 @@ g
 ```
 ### Organization Location 
 
-```{r org_location}
-library(ggmap)
-library(leaflet)
+```{r org_location, eval=FALSE, include=FALSE}
+
 register_google(Sys.getenv("google_geocode_key"))
 
 geo_o <- org2 |> 
@@ -363,6 +364,29 @@ stu <- stu |>
   rename_with(~ gsub('please_rate_your_experience_with_the_following_technical_skills_note_1_not_experienced_and_5_extremely_experienced_', '', .x)) |> 
   rename_with(~ gsub('please_rate_your_experience_with_the_following_consulting_and_evaluation_skills_note_1_not_experienced_and_5_extremely_experienced_', '', .x)) |>
   rename_with(~ gsub('which_of_the_following_best_describes_your_race_ethnicity_select_all_that_apply_selected_choice_', '', .x) ) 
+
+npo <- stu |> 
+  rename_with(~ gsub('which_ut_schools_colleges_are_you_affiliated_with_check_all_that_apply_selected_choice_', '', .x)) |>
+  select(first_name, last_name, pronouns, preferred_pronouns_other_please_specify_text,
+         email, phone, ut_eid, nonprofit_experience, lbj_school_of_public_affairs:which_ut_schools_colleges_are_you_affiliated_with_check_all_that_apply_other_text) |> 
+  rename(other_school = which_ut_schools_colleges_are_you_affiliated_with_check_all_that_apply_other_text) |> 
+  select(-other) |> 
+  mutate(nonprofit_experience = case_when(
+    nonprofit_experience == "No experience (yet!)" ~ "1",
+    nonprofit_experience == "Less than 6 months" ~ "2",
+    nonprofit_experience == "6 - 12 months" ~ "3",
+    nonprofit_experience == "1 - 2 years" ~ "4",
+    nonprofit_experience == "Over 2 years" ~ "5"),
+  across(lbj_school_of_public_affairs:other_school, ~replace_na(.x,"")),
+  school = paste0(lbj_school_of_public_affairs, " ", college_of_education, " ", public_health, " ",
+                  steve_hicks_school_of_social_work, " ",school_of_information, " ",  mc_combs_school_of_business, " ",
+                  college_of_liberal_arts, " ", other_school),
+  nonprofit_experience = as.numeric(nonprofit_experience)) |> 
+  filter(nonprofit_experience > 3) |> 
+  select(-c(lbj_school_of_public_affairs, college_of_education, public_health, school_of_information,
+            college_of_liberal_arts, steve_hicks_school_of_social_work, college_of_liberal_arts, other_school))
+
+write.csv(npo, "data/processed/summer2022_npo_portfolio.csv", row.names = FALSE)
 
 
 race <- stu |> 
@@ -509,7 +533,7 @@ kbl(stu_table, escape = F) |>
 
 We do not collect student addresses, but `Qualtrics` does record the longitude and latitude of where students fill out the form. Therefore, the following map is only an estimate of where our applicants live. 
 
-```{r student_location}
+```{r student_location, eval=FALSE, include=FALSE}
 
 stu_geo <- stu |> 
   select(first_name, last_name, location_latitude, location_longitude ) |> 
@@ -756,7 +780,6 @@ res_pred_test <- predict(ra_fit, new_data = res_test)
 results <- res_test |> 
   bind_cols(res_pred_test)
 
-results
 ```
 
 
@@ -1141,7 +1164,7 @@ uo_nlp <- as.matrix.data.frame(uo_nlp)
 ```
 
 
-```{r nlp_match}
+```{r nlp_match,message=FALSE, warning=FALSE, layout="l-body-outset"}
 
 #Matching Algorithm 
 matching = galeShapley.marriageMarket(uS, uo_nlp)

@@ -4,22 +4,23 @@ library(tidyverse)
 library(janitor)
 library(qualtRics)  #For connecting to Qualtrics API
 library(Hmisc)      #Helpful for annotations and labels
-library(ggmap)
+library(tidygeocoder)
 
 #------------------- Getting Data from Qualtrics ------------------------------#
-# qualtrics_api_credentials(
-#   api_key = Sys.getenv("qualtrics_key"), 
-#   base_url = "ca1.qualtrics.com", 
-#   install = FALSE
-# )
-# 
-# surveys <- all_surveys() 
-# 
-# stu_number <- which(surveys$name=="08.CONNECT- Fall 2021", arr.ind=TRUE)
-# org_number <- which(surveys$name=="Matching Form_Fall 2021", arr.ind=TRUE)
-# 
-# org_raw <- fetch_survey(surveyID = surveys$id[org_number], force_request = TRUE)
-# stu_raw <- fetch_survey(surveyID = surveys$id[stu_number], force_request = TRUE)
+qualtrics_api_credentials(
+  api_key = Sys.getenv("qualtrics_key"),
+  base_url = "ca1.qualtrics.com",
+  install = FALSE
+)
+
+surveys <- all_surveys()
+
+stu_number <- which(surveys$name=="10.CONNECT- Summer 2022", arr.ind=TRUE)
+org_number <- which(surveys$name=="Matching Form_Summer 2022", arr.ind=TRUE)
+
+#Fetching the Survey Contents 
+org_raw <- fetch_survey(surveyID = surveys$id[org_number], force_request = TRUE)
+stu_raw <- fetch_survey(surveyID = surveys$id[stu_number], force_request = TRUE)
 
 
 #---------------------------- Project Summaries ------------------------------#
@@ -27,54 +28,55 @@ library(ggmap)
 #Reading additional org data. This section will be changed next semester when
 #org form is improved
 
-org <- read_csv("data/processed/rgk_spring_2022.csv")
-
+org <- org_raw
+colnames(org) <- label(org)
 org <- org |>
+  clean_names() |> 
+  rename_with(~ gsub('please_rate_how_relevant_the_following_technical_skills_are_to_your_project_', '', .x)) |> 
+  rename_with(~ gsub('please_rate_how_relevant_the_following_evaluation_consulting_and_language_skills_are_to_your_project_', '', .x)) |> 
+  rename(nonprofit_experience = "how_much_experience_working_or_volunteering_with_nonprofits_should_your_candidate_have_working_or_volunteering_for_nonprofits",
+         time_commitment = realistically_how_much_time_do_you_expect_your_student_to_commit_per_week_working_on_your_assigned_project,
+         transportation = does_your_candidate_need_to_have_access_to_transportation,
+         flexible_hours = will_your_project_permit_flexible_work_hours,
+         remote = will_your_candidate_be_able_to_work_remotely) |> 
+  rename("spanish" = "please_indicate_how_relevant_the_proficiency_with_the_following_languages_is_to_your_project_note_1_language_proficiency_not_required_and_5_native_speaker_required_spanish") |> 
   mutate(transportation = case_when(
-    transportation == "Yes" ~ "Transporation Required, ",
-    TRUE ~ ""
-  ),
-  flexible_hours = case_when(
-    flexible_hours == "Yes" ~ "Flexible Hours, ",
-    TRUE ~ "Fixed Hours, "
-  ),
-  remote = case_when(
-    remote == "Yes" ~ "Remote",
-    TRUE ~ "Must work from site"
-  ),
-  what_other_relevant_skills_would_be_helpful_for_your_candidate_to_have_i_e_other_languages_spoken_coding_analytical_software_professional_skills_etc_list_them_here =
-    replace_na(what_other_relevant_skills_would_be_helpful_for_your_candidate_to_have_i_e_other_languages_spoken_coding_analytical_software_professional_skills_etc_list_them_here, "None")
-
-  ) |> 
-  mutate(work_environment = paste0(transportation, 
+          transportation == "Yes" ~ "Transporation Required, ",
+          TRUE ~ ""
+        ),
+        flexible_hours = case_when(
+          flexible_hours == "Yes" ~ "Flexible Hours, ",
+          TRUE ~ "Fixed Hours, "
+        ),
+        remote = case_when(
+          remote == "Yes" ~ "Remote",
+          TRUE ~ "Must work from site"
+        ),
+        work_environment = paste0(transportation, 
                                    flexible_hours,
                                    remote),
-         project_deliverables = gsub('(\\s\\d)\\)', '<br><br>\\1\\.', project_deliverables),
+          project_deliverables = gsub('(\\s\\d)\\)', '\n\n \\1\\)', project_deliverables),
          organization_address = case_when(
            organization_address == "N/A" ~ "",
            TRUE ~ organization_address
          )) |> 
-  mutate(across(23:47,~gsub("1 - Not relevant", "1", .)),
-         across(23:47,~gsub("5 - Extremely relevant", "5", .)),
-         across(23:47, as.numeric))
+  mutate(across(45:69,~gsub("1 - Not relevant", "1", .)),
+         across(45:69,~gsub("5 - Extremely relevant", "5", .)),
+         across(45:69, as.numeric))
 
 
-
-register_google(Sys.getenv("google_geocode_key"))
-org <- mutate_geocode(org, organization_address)
-
-org$organization_address[org$organization == "TransFORWARD"] <- "N/A"
-
+#write.csv(org, "data/processed/werk.csv", row.names = FALSE)
+library(readr)
+org2 <- read_csv("data/processed/werk.csv")
 
 #Getting the slices from project name so that organization with duplicates aren't deleted 
-slices = unique(org$project_name)[!is.na(unique(org$project_name))]
-
-slice = slices[1]
+slices = unique(org2$project_name)
 
 
+#Make sure the object is called org2 or whatever you chang it to 
 for(v in slices){
   render("rmarkdown/project_summaries.Rmd",
-         output_file=paste0("C:/Users/tenis/Desktop/Data_Projects/connect_matching/reports/rgk_project_summaries/Spring 2022/", v, ".html")
+         output_file=paste0("C:/Users/tenis/Desktop/Data_Projects/connect_matching/reports/rgk_project_summaries/Summer 2022/", v, ".pdf")
          )
 }
 
