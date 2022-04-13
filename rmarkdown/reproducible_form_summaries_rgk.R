@@ -139,6 +139,10 @@ stu <- stu |>
         please_select_each_of_the_following_that_applies_to_you_i_am_pursuing_a_doctoral_degree == "I am pursuing a doctoral degree." ~ "DOCTORAL CANDIDATE",
         TRUE ~ ""
       ),
+    is_there_any_additional_information_regarding_your_availability_that_we_should_know_about = case_when(
+      is_there_any_additional_information_regarding_your_availability_that_we_should_know_about == "" ~ "NONE",
+      TRUE ~ is_there_any_additional_information_regarding_your_availability_that_we_should_know_about
+    )
   ) |> 
   mutate(degree = paste0(please_select_each_of_the_following_that_applies_to_you_i_am_pursuing_a_masters_degree,
                          please_select_each_of_the_following_that_applies_to_you_i_am_pursuing_a_doctoral_degree)) |> 
@@ -158,17 +162,20 @@ stu <- stu |>
 stu$school <- gsub("_","",stu$school)
 stu$school <- gsub("Other:", "", stu$school)
 stu$school <- gsub("([a-z])([A-Z])","\\1 & \\2",stu$school)
+stu$school <- gsub("Mc & Combs","McCombs",stu$school)
 
 stu$interests <- gsub("_","",stu$interests)
 stu$interests <- gsub("([a-z])([A-Z])","\\1, \\2",stu$interests)
 
-stu$every_semester_the_connect_program_works_with_organizations_that_serve_many_different_target_populations_are_there_any_specific_populations_that_youre_interested_in_working_with[stu$every_semester_the_connect_program_works_with_organizations_that_serve_many_different_target_populations_are_there_any_specific_populations_that_youre_interested_in_working_with == ""] <- "Open to all"
-stu$every_semester_the_connect_program_works_with_organizations_that_serve_many_different_target_populations_are_there_any_specific_populations_that_youre_interested_in_working_with[stu$every_semester_the_connect_program_works_with_organizations_that_serve_many_different_target_populations_are_there_any_specific_populations_that_youre_interested_in_working_with == "no"] <- "Open to all"
-
+stu$target_population[stu$target_population == ""] <- "Open to all"
+stu$target_population[stu$target_population == "no"] <- "Open to all"
+stu$relevant_skills[stu$relevant_skills == ""] <- "Additional not listed"
+stu$is_there_any_additional_information_regarding_your_availability_that_we_should_know_about[stu$is_there_any_additional_information_regarding_your_availability_that_we_should_know_about == ""] <- "None listed"
 
 
 slices = unique(stu$name)[!is.na(unique(stu$name))]
 
+#The next line just for testing a few students 
 slices2 <- slices[1:3]
 
 for(v in slices){
