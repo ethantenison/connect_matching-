@@ -134,7 +134,6 @@ g
 \bigskip
 \bigskip
 
-
 ```{r logo, echo=FALSE, out.width="300px", fig.align='center'}
 knitr::include_graphics("C:/Users/tenis/Desktop/Data_Projects/connect_matching/rmarkdown/images/RGB_formal_RGK.png")
 

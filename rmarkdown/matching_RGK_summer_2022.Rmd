@@ -31,7 +31,7 @@ library(htmltools)  #for html widgets
 library(matchingR)  #for gale shapley 
 library(tidymodels) #for ml
 library(tidytext)   #for nlp
-library(pdftools)   #converting pdfs
+#library(pdftools)   #converting pdfs this was having problems on mac 
 library(textrecipes) #nlp processing
 library(discrim)   
 library(yaml)      #saving models
@@ -48,17 +48,19 @@ Every semester the CONNECT Program pairs community organizations with graduate s
 
 # Qualtrics
 
-Using the `qualtRics` package the organization and student surveys were pulled directly from Qualtrics. In order to connect to the Qualtrics API, you must have UT staff privileges. Any UT student must have their privileges updated by contacting UT IT Services. Your Qualtrics API can be accessed through account settings in the "Qualtrics IDs" section. 
+Using the `qualtRics` package the organization and student surveys were pulled directly from Qualtrics. In order to connect to the Qualtrics API, you must have UT staff privileges. Any UT student must have their privileges updated by contacting UT IT Services. There may be situations in which staff also lack privileges, in which case you can also contact IT. Your Qualtrics API can be accessed through account settings in the "Qualtrics IDs" section. Copy paste the API token into the `qualtrics_api_creditials` function `api_key` attribute. The base url is constructed by taking the "Datacenter ID" in Qualtrics and adding ".qualtrics.com" to it. 
+
+It's really important that you do not save the api key inside this document if you're using Github. If this happens, the Github security bot will alert Qualtrics and you'll have your permissions revoked.To get around this you can save your api key to in your internal system. You can do this by using the function `Sys.setenv("KEY NAME" = "API KEY")`, and then you can call it using calling `Sys.getenv("KEY NAME")`. 
+
+Once you've established your Qualtrics credentials downloaded a list of your Qualtrics surveys, you need to find the row index of the survey(s) you're working. To do that, copy paste the survey name into the `which` function. Then you can use `fetch_survey` to pull the raw survey data.
 
 ```{r qualtrics, message=FALSE, warning=FALSE, echo=TRUE, results='hide'}
 
 # Connecting to the Qualtrics API
 # There's always problem with the api. Make sure they haven't changed your key.....
 # set your api key using Sys.setenv("NAME" = "API KEY")
-# qualtrics_api_credentials(
-# api_key = Sys.getenv("qualtrics_key"), 
-# base_url = "ca1.qualtrics.com"
- #)
+qualtrics_api_credentials(api_key = Sys.getenv("qualtrics_key"),
+                          base_url = "ca1.qualtrics.com")
 
 #Pulling the organization and students surveys 
 surveys <- all_surveys() 
@@ -313,6 +315,7 @@ g
 
 
 ```
+
 ### Organization Location 
 
 ```{r org_location, eval=FALSE, include=FALSE}
@@ -654,7 +657,7 @@ After 3 years of the CONNECT program we have a lot of resumes and data. Combinin
 
 First we need to convert the pdfs to text. Then we preprocess the text data so that it doesn't contain punctuation or words that don't have any meaning, like the word "the" or "at". Finally, we split the data into test and train datasets 
 
-```{r model_prep, message=FALSE, warning=FALSE}
+```{r model_prep, message=FALSE, warning=FALSE, eval=FALSE}
 
 # converting resumes to text data 
 
@@ -721,7 +724,7 @@ res_test <- testing(res_split)
 
 Random forest was used to classify the resumes. 
 
-```{r ml, message=FALSE, warning=FALSE}
+```{r ml, message=FALSE, warning=FALSE, eval = FALSE}
 bucket_rec <- recipe(con_bucket ~ resume, data = res_train)
 bucket_rec <- bucket_rec %>%
   step_tokenize(resume) %>%
@@ -750,7 +753,7 @@ ra_wf %>%
 
 The model has an accuracy of around 95%. NOTE this is after I moved some resumes because they were not technical. The model is best at evaluating whether a student's resume is technical or not. 
 
-```{r eval}
+```{r eval, eval = FALSE}
 
 res_folds <- vfold_cv(data = res_train, strata = con_bucket, v = 3)
 
@@ -770,7 +773,7 @@ ra_cv_metrics
 
 ```
 Testing out algorithm using test dataset
-```{r testing}
+```{r testing, eval = FALSE}
 
 ra_fit <- ra_wf %>%
   fit(data = res_train)
@@ -1051,7 +1054,7 @@ kbl(students_matched) |>
 
 ### Assigning Tech Rating
 
-```{r modifying_data}
+```{r modifying_data, eval=FALSE}
 
 #pulling the bucket information
 tech <- org2 |> 
@@ -1082,7 +1085,7 @@ org_nlp <- org_nlp[-1,]
 
 Unfortunately the qualtrics api doesn't not read in uploaded files yet. 
 
-```{r resumes}
+```{r resumes, eval=FALSE}
 
 # One student's resume did not convert. Avni. It doesn't look like we have any project
 #for him though 
@@ -1098,7 +1101,7 @@ rs <- as.data.frame(rs_raw) |>
 
 ### Run Model 
 
-```{r run_model}
+```{r run_model, eval=FALSE}
 
 res_pred_test <- predict(ra_fit, new_data = rs)
 
@@ -1111,7 +1114,7 @@ rs_pred <- rs |>
 ### Altering Utility Scores
 
 
-```{r}
+```{r, eval=FALSE}
 
 stu_id <- stu |> 
   select(first_name, last_name, response_id) |> 
@@ -1164,7 +1167,7 @@ uo_nlp <- as.matrix.data.frame(uo_nlp)
 ```
 
 
-```{r nlp_match,message=FALSE, warning=FALSE, layout="l-body-outset"}
+```{r nlp_match,message=FALSE, warning=FALSE, layout="l-body-outset", eval=FALSE}
 
 #Matching Algorithm 
 matching = galeShapley.marriageMarket(uS, uo_nlp)
