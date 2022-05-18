@@ -26,3 +26,8 @@ This algorithm was developed to streamline the student-nonprofit matching proces
 +-- reports         <- Generated analysis and automated reports
 |
 +-- models          <- Saved NLP model 
+```
+
+All the coding work takes places in the Scripts_and_Rmarkdown folder. For the matching process, use matching_RGK.Rmd. For automated reports you will use three files: reproducible_script.R, project_summaries.Rmd, and student_summaries.Rmd. The first script is used to data prep for both student and project summaries. The last two are both report templates. Once the prep work is done, reproducible_script.R can loop over both of the templates to create the reports. 
+
+**NOTE** The NLP work has been separated into separate files because it is experimental and needs to be improved before fully integrating with the system. 
