@@ -13,7 +13,15 @@ This algorithm was developed to streamline the student-nonprofit matching proces
 |    +-- processed  <- The final datasets 
 |    +-- raw        <- Original data if it needs to be saved
 |
-+-- rmarkdown       <- rmarkdown documents
++-- Scripts_and_Rmarkdown     
+|    +-- images                 <- logos for reports and matching
+|    +-- matching_RGK.Rmd       <- Used for matching
+|    +-- matching_RGK_NLP.Rmd   <- Experimental matching with NLP
+|    +-- project_summaries.Rmd  <- project summary template
+|    +-- reproducible_script.R  <- script to create automated reports
+|    +-- resume_analysis.Rmd    <- Testing NLP
+|    +-- student_summaries.Rmd  <- student summary template
+|    +-- theme.css              <- automated report styling
 |
 +-- reports         <- Generated analysis and automated reports
 |
