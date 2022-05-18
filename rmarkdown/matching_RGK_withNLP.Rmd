@@ -644,36 +644,153 @@ g
 
 ```
 
-# Matching 
-
-In order to use the matching Algorithm, students and organizations have to be assigned a utility ratings. These ratings are formulated by comparing how similar the students' skills and nonprofit experience are to the project expectations. 
-
-Each student receives a utility score for each organization, and each organization is assigned a utility sore for each student. This ensures that both the student's and organization's rankings are taken into account for the matching process. For example, if an organization assigns two students the same utility score, but one student has a higher utility score for that organization, this student is selected and the other student returns to the selection pool. 
+# Resumes Model Training 
 
 
-### Prematches
+### Methodology
 
-Before computing the utility scores, we need to remove students and organizations that have already been matched. 
+After 3 years of the CONNECT program we have a lot of resumes and data. Combining the project bucket data with the resumes, I created a labeled data set. Since the first and second buckets are less technical, and the third and fourth are more so, I was able to combine them further into a binary variable, or technical classification. Then I used natural language processing and a random forest model to predict which students resumes were technical or not. The first run through had an accuracy rating of over 80%, after using cross validation. Upon closer inspection, many of those that were mislabeled were actually students who were super technical matched with a less technical project, or vice versa. There are many reason why this might have happened. Maybe the student was super technical but shared an interest with the organization, or maybe a project wound up in bucket 2 even if it only needed excel. Since the main goal of this is to assign a technical rating, it doesn't really matter if some of the student resumes were relabeled. There were a handful in each category where the algorithm clearly failed. PhD students who submitted large CV's, for example, were often mislabeled, and those were kept in there. Over all, with the changes to the labels, the algorithm performed much better. 
 
-```{r prematches}
+** NOTE! Some of the resumes were moved to different buckets in the end. The reason for this is because some of them were clearly not technical or clearly not technical, leading to lower model performance. 
 
-stu4 <- stu4 |> 
-  filter(name != "Brie Winnega Reamer",
-         name != "Ziyue Xu",
-         name != "Francisco Castellanos-Sosa",
-         name != "Rania Sahail",
-         name != "Abigail Grider-Reidf")
+### Model Prep
 
-org3 <- org3 |> 
-  filter(organization != "Texas Census 2030",
-         organization != "Austin Asian Impact",
-         organization != "Keep Austin Fed")
+First we need to convert the pdfs to text. Then we preprocess the text data so that it doesn't contain punctuation or words that don't have any meaning, like the word "the" or "at". Finally, we split the data into test and train datasets 
+
+```{r model_prep, message=FALSE, warning=FALSE, eval=FALSE}
+
+# converting resumes to text data 
+
+convertpdf2txt <- function(dirpath){
+  files <- list.files(dirpath, full.names = T)
+  x <- sapply(files, function(x){
+  x <- pdftools::pdf_text(x) %>%
+  paste(sep = " ") %>%
+  stringr::str_replace_all(stringr::fixed("\n"), " ") %>%
+  stringr::str_replace_all(stringr::fixed("\r"), " ") %>%
+  stringr::str_replace_all(stringr::fixed("\t"), " ") %>%
+  stringr::str_replace_all(stringr::fixed("\""), " ") %>%
+  stringr::str_replace_all("[^[:alnum:]]", " ") %>% #this line removes 
+    #everything that's no alphanumerica
+  paste(sep = " ", collapse = " ") %>%
+  stringr::str_squish() %>%
+  stringr::str_replace_all("- ", "") 
+  return(x)
+    })
+}
+
+
+b1_raw <- convertpdf2txt("data/raw/resumes_bucket1/")
+b1 <- as.data.frame(b1_raw) |> 
+  mutate(bucket = "Bucket 1") |> 
+  rename(resume = b1_raw)
+
+b2_raw <- convertpdf2txt("data/raw/test/")
+b2 <- as.data.frame(b2_raw) |> 
+  mutate(bucket = "Bucket 2")  |> 
+  rename(resume = b2_raw)
+
+b3_raw <- convertpdf2txt("data/raw/resumes_bucket3/")
+b3 <- as.data.frame(b3_raw) |> 
+  mutate(bucket = "Bucket 3") |> 
+  rename(resume = b3_raw)
+b4_raw <- convertpdf2txt("data/raw/resumes_bucket4/")
+b4 <- as.data.frame(b4_raw) |> 
+  mutate(bucket = "Bucket 4")  |> 
+  rename(resume = b4_raw)
+
+res <- b1 |> 
+  bind_rows(b2, b3, b4) |> 
+  mutate(con_bucket = case_when(
+    bucket == "Bucket 1" ~ "Less Technical",
+    bucket == "Bucket 2" ~ "Less Technical",
+    bucket == "Bucket 3" ~ "More Technical",
+    bucket == "Bucket 4" ~ "More Technical",
+    TRUE ~ "Other"
+  ),
+  bucket = factor(bucket),
+  con_bucket = factor(con_bucket)) 
+
+
+set.seed(27)
+res_split <- initial_split(data = res, strata = con_bucket, prop = .8)
+res_train <- training(res_split)
+res_test <- testing(res_split)
+
+```
+
+
+### ML
+
+Random forest was used to classify the resumes. 
+
+```{r ml, message=FALSE, warning=FALSE, eval = FALSE}
+bucket_rec <- recipe(con_bucket ~ resume, data = res_train)
+bucket_rec <- bucket_rec %>%
+  step_tokenize(resume) %>%
+  step_stopwords(resume) %>%
+  step_tokenfilter(resume, max_tokens = 500) %>%
+  step_tfidf(resume)
+
+ra_spec <- rand_forest() %>%
+  set_mode("classification") %>%
+  set_engine("randomForest")
+
+
+ra_wf <- workflow() %>%
+  add_recipe(bucket_rec) %>%
+  add_model(ra_spec)
+
+ra_wf %>%
+  fit(data = res_train)
+
 
 
 ```
 
 
+### Evaluating
 
+The model has an accuracy of around 95%. NOTE this is after I moved some resumes because they were not technical. The model is best at evaluating whether a student's resume is technical or not. 
+
+```{r eval, eval = FALSE}
+
+res_folds <- vfold_cv(data = res_train, strata = con_bucket, v = 3)
+
+ra_cv <- ra_wf %>%
+  fit_resamples(
+    res_folds,
+    control = control_resamples(save_pred = TRUE),
+    metrics = metric_set(recall, precision, accuracy, roc_auc)
+  )
+
+ra_cv_metrics <- collect_metrics(ra_cv)
+ra_cv_predictions <- collect_predictions(ra_cv)
+
+ra_cv_metrics
+
+
+
+```
+Testing out algorithm using test dataset
+```{r testing, eval = FALSE}
+
+ra_fit <- ra_wf %>%
+  fit(data = res_train)
+
+res_pred_test <- predict(ra_fit, new_data = res_test)
+
+results <- res_test |> 
+  bind_cols(res_pred_test)
+
+```
+
+
+# Matching 
+
+In order to use the matching Algorithm, students and organizations have to be assigned a utility ratings. These ratings are formulated by comparing how similar the students' skills and nonprofit experience are to the project expectations. 
+
+Each student receives a utility score for each organization, and each organization is assigned a utility sore for each student. This ensures that both the student's and organization's rankings are taken into account for the matching process. For example, if an organization assigns two students the same utility score, but one student has a higher utility score for that organization, this student is selected and the other student returns to the selection pool. 
 
 ### Utility Score Example 
 
@@ -730,11 +847,27 @@ utility_score <- sum(match1$utility)
 print(paste0(stu1[1,1],"'s utility for ",org1[1,1], ": ", utility_score))
 ```
 
-### Student Utility Scores 
+### Prematches
 
-First each student receives a utility score for each organization.Higher student utility scores mean that an organization is better suited to work with that student. 
+```{r prematches}
 
-```{r student_utility, message=FALSE, warning=FALSE}
+stu4 <- stu4 |> 
+  filter(name != "Brie Winnega Reamer",
+         name != "Ziyue Xu",
+         name != "Francisco Castellanos-Sosa",
+         name != "Rania Sahail",
+         name != "Abigail Grider-Reidf")
+
+org3 <- org3 |> 
+  filter(organization != "Texas Census 2030",
+         organization != "Austin Asian Impact",
+         organization != "Keep Austin Fed")
+
+
+```
+
+
+```{r student_utility, message=FALSE, warning=FALSE, include=FALSE}
 
 #utility students                                    
 column_names <- stu4$name
@@ -781,13 +914,14 @@ for (i in 1:length(org3$project_name)) {
   
 }
 
+kbl(uS, escape = F) |> 
+  kable_material(c("hover", "striped", "condensed"), full_width = F) |> 
+  scroll_box(width = "100%", height = "400px")
 
 ```
 ### Organization Utility Scores
 
-Next the organization utility scores are calculated using the same process except the order of the dataframes is changed to give organizations priority. Higher organization utility scores mean that the student is better suited to the organization's project. These ratings can be validated by reviewing students resumes when necessary.
-
-Additionally, a table is created with all of the organization utility scores. Whenever we want to view student replacements we can use this table to select other high scores. The reason why we only look at the organization utility scores is because we're more concerned with finding a good fit for the organization. 
+For simplicity sake, only the organization utility scores are shown below because their preference matters more in the event of an unsuitable first match. Higher organization utility scores mean that the student is better suited to the organization's project. These ratings can be validated by reviewing students resumes when necessary.
 
 
 ```{r org_utility, message=FALSE, warning=FALSE, layout="l-body-outset"}
@@ -857,8 +991,6 @@ kbl(uO_table, escape = F) |>
 
 ### The Gale Shapley Algorithm
 
-And finally matching! 
-
 The `matchingR` package was used to quickly compute the Gale-Shapley algorithm. The algorithm was devised to create satisfactory matches between two parties, in this case between organizations and students. It has been used commercially on match making websites, in college admissions, and by the healthcare industry to match organ donors with organ recipients. The former being the major impetus for the creators to receive the Nobel Prize in Economics in 2012. You can find a full description of the package and literature behind the Gale-Shapley algorithm [here](https://cran.r-project.org/web/packages/matchingR/vignettes/matchingR-intro.html).
 
 ```{r gale_shapley, echo=FALSE, message=TRUE, warning=FALSE}
@@ -914,6 +1046,173 @@ kbl(students_matched) |>
   scroll_box(width = "100%", height = "600px")
 
 ```
+
+<br>
+
+
+# Matching with NLP
+
+### Assigning Tech Rating
+
+```{r modifying_data, eval=FALSE}
+
+#pulling the bucket information
+tech <- org2 |> 
+  select(organization, starts_with("identify_the_categories")) |> 
+   rename_with(~ gsub('identify_the_categories_your_project_falls_under_check_all_that_apply_', '', .x)) |>
+  pivot_longer(cols = 2:7, names_to = "bucket", values_to = "value") |> 
+  filter(!is.na(value),
+         value != "Data Collection & Tool Development" &
+         value != "Measurement Strategy",
+         value != "Research") |> 
+  select(organization, value)
+
+#joining org score with technical 
+org_nlp <- org3 |> 
+  left_join(tech, by = "organization") |> 
+  mutate(technical = case_when(
+    is.na(value) ~ "Less Technical",
+    TRUE ~ "More Technical"
+  )) |> 
+  select(-value)
+
+org_nlp <- org_nlp[-1,]
+
+```
+
+
+### Reading in student resumes 
+
+Unfortunately the qualtrics api doesn't not read in uploaded files yet. 
+
+```{r resumes, eval=FALSE}
+
+# One student's resume did not convert. Avni. It doesn't look like we have any project
+#for him though 
+rs_raw <- convertpdf2txt("data/raw/2022_summer_resumes/")
+rs <- as.data.frame(rs_raw) |> 
+  rownames_to_column("id") |> 
+  rename(resume = "rs_raw") |> 
+  mutate(id = gsub("data/raw/2022_summer_resumes/", "", id),
+         id = gsub("~.*", "", id))
+
+
+```
+
+### Run Model 
+
+```{r run_model, eval=FALSE}
+
+res_pred_test <- predict(ra_fit, new_data = rs)
+
+rs_pred <- rs |> 
+  bind_cols(res_pred_test)
+
+
+```
+
+### Altering Utility Scores
+
+
+```{r, eval=FALSE}
+
+stu_id <- stu |> 
+  select(first_name, last_name, response_id) |> 
+  mutate(name = paste0(first_name," ", last_name)) |> 
+  left_join(rs_pred, by = c("response_id" = "id")) |> 
+  select(name, .pred_class) |> 
+  rename(technical_rating = .pred_class)
+
+
+org_rating <- org_nlp$technical
+
+uo_nlp <- as.data.frame(uO) |> 
+  rownames_to_column("name") |> 
+  left_join(stu_id, by = "name") |> 
+  select(-name)
+
+#Downweighting  mismatched resumes
+for(j in 1:nrow(uo_nlp)) {
+  for (i in 1:(ncol(uo_nlp) - 1)) {
+    if (org_rating[i] == "More Technical" & uo_nlp[j,18] == "Less Technical") {
+      std <- sd(uo_nlp[,i])
+      uo_nlp[j, i] <- uo_nlp[j,i]-std/2
+    }
+  }
+}
+
+#removing negatives
+for(j in 1:nrow(uo_nlp)) {
+  for (i in 1:(ncol(uo_nlp) - 1)) {
+    if (uo_nlp[j, i] < 0) {
+      uo_nlp[j, i] <- 0
+    } 
+  }
+}
+
+uo_names <- as.data.frame(uO) |> 
+  rownames_to_column("name") |> 
+  left_join(stu_id, by = "name") |> 
+  select(name)
+
+#returning matrix to prior form
+uo_nlp <- uo_nlp |> 
+  select(-c(technical_rating)) |> 
+  bind_cols(uo_names) |> 
+  column_to_rownames(var="name")
+  
+uo_nlp <- as.matrix.data.frame(uo_nlp)
+
+
+```
+
+
+```{r nlp_match,message=FALSE, warning=FALSE, layout="l-body-outset", eval=FALSE}
+
+#Matching Algorithm 
+matching = galeShapley.marriageMarket(uS, uo_nlp)
+
+#Creating a list of top scorers
+uO2 <- as.data.frame(uo_nlp)
+org_options <- tibble::rownames_to_column(uO2, "Student") 
+tops <- list()
+
+for (i in 2:ncol(org_options)) {
+  org_top <- org_options |> 
+    slice_max(org_options[,i], n = 3)
+  
+tops[[i]] <- paste(org_top$Student, collapse=", ") 
+}
+
+tops <- tops[-1]
+top_df <- data.frame(matrix(unlist(tops), nrow=length(tops), byrow=TRUE))
+
+top_df$matrix.unlist.tops...nrow...length.tops...byrow...TRUE.<-
+  gsub("\\."," ",top_df$matrix.unlist.tops...nrow...length.tops...byrow...TRUE.)
+
+#Creating a data frame for table 
+org_info <- org3 |> 
+  select(project_name)
+
+students_matched <- stu4 |> 
+  slice(matching$engagements) |> 
+  bind_cols(org_info) |>  
+  bind_cols(top_df) |> 
+  rename(Student = name, 
+         Project = project_name,
+         "Top Scores" = "matrix.unlist.tops...nrow...length.tops...byrow...TRUE.") |> 
+  select(Project, Student,"Top Scores")
+  
+
+var_label(students_matched$Project) <- NULL
+
+
+kbl(students_matched) |> 
+  kable_material(c("hover","striped"), full_width = F) |> 
+  scroll_box(width = "100%", height = "600px")
+
+```
+
 
 
 <img src="C:/Users/tenis/Desktop/Data_Projects/connect_matching/reports/RGB_formal_RGK.png" alt="RGK Center">
